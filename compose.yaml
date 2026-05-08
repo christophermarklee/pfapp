@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pfapp}
+      POSTGRES_USER: ${POSTGRES_USER:-pfapp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pfapp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pfapp} -d ${POSTGRES_DB:-pfapp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Containerfile
+    env_file:
+      - .env
+    environment:
+      DEBUG: ${DEBUG:-1}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-development}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      DATABASE_NAME: ${DATABASE_NAME:-pfapp}
+      DATABASE_USER: ${DATABASE_USER:-pfapp}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-pfapp}
+      DATABASE_HOST: ${DATABASE_HOST:-db}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+    volumes:
+      - .:/app:Z
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
