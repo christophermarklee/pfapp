@@ -1,0 +1,1866 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PFApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --bg: #f3f4f6;
+      --surface: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-muted: #6b7280;
+      --primary: #2563eb;
+      --primary-h: #1d4ed8;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --warning: #d97706;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.5; font-size: 14px; }
+
+    /* ---- Header ---- */
+    .app-header {
+      background: #111827; color: white; height: 56px; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .app-logo { font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
+    .app-logo span { color: #60a5fa; }
+    .hdr-right { display: flex; align-items: center; gap: 16px; font-size: 13px; color: #9ca3af; }
+    .hdr-right a { color: #9ca3af; text-decoration: none; }
+    .hdr-right a:hover { color: white; }
+
+    /* ---- Nav ---- */
+    .app-nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; }
+    .nav-tab {
+      padding: 14px 20px; font-size: 14px; font-weight: 500; color: var(--text-muted);
+      cursor: pointer; border-bottom: 2px solid transparent; user-select: none;
+      transition: color .15s, border-color .15s;
+    }
+    .nav-tab:hover { color: var(--text); }
+    .nav-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ---- Layout ---- */
+    .app-body { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+    /* ---- Cards ---- */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+    .card-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title { font-size: 14px; font-weight: 600; }
+    .card-body { padding: 18px; }
+
+    /* ---- Stat grid ---- */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 6px; }
+    .stat-value { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+    .stat-value.pos { color: var(--success); }
+    .stat-value.neg { color: var(--danger); }
+
+    /* ---- Buttons ---- */
+    .btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+      cursor: pointer; border: 1px solid transparent; transition: background .15s, color .15s;
+      font-family: var(--font);
+    }
+    .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-h); border-color: var(--primary-h); }
+    .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
+    .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+    .btn-del { background: transparent; color: var(--danger); border: none; }
+    .btn-del:hover:not(:disabled) { background: #fef2f2; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ---- Section row ---- */
+    .sec-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .sec-title { font-size: 15px; font-weight: 600; }
+
+    /* ---- Account cards ---- */
+    .acct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+    .acct-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .acct-card-hdr {
+      padding: 12px 14px; background: #f9fafb; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .inst-name { font-weight: 600; font-size: 14px; }
+    .inst-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .acct-row {
+      padding: 9px 14px; border-bottom: 1px solid #f3f4f6;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .acct-row:last-child { border-bottom: none; }
+    .acct-name { font-size: 13px; font-weight: 500; }
+    .acct-sub { font-size: 11px; color: var(--text-muted); }
+    .acct-bal { font-size: 14px; font-weight: 600; }
+    .acct-bal.neg { color: var(--danger); }
+
+    /* ---- Tables ---- */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left; padding: 9px 14px;
+      font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+      color: var(--text-muted); background: #f9fafb; border-bottom: 1px solid var(--border);
+    }
+    td { padding: 11px 14px; border-bottom: 1px solid #f3f4f6; font-size: 13px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    /* ---- Badges ---- */
+    .badge {
+      display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 100px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .03em;
+    }
+    .b-green { background: #dcfce7; color: #166534; }
+    .b-red   { background: #fee2e2; color: #991b1b; }
+    .b-yellow{ background: #fef9c3; color: #854d0e; }
+    .b-gray  { background: #f3f4f6; color: #374151; }
+    .b-blue  { background: #dbeafe; color: #1e40af; }
+
+    /* ---- Sub-tabs ---- */
+    .sub-tabs { display: flex; gap: 8px; }
+    .sub-tab {
+      padding: 5px 14px; border-radius: 100px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: 1px solid var(--border); background: white; color: var(--text-muted);
+      transition: all .15s;
+    }
+    .sub-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    /* ---- Modal ---- */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal {
+      background: white; border-radius: var(--radius); width: 100%; max-width: 480px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+    .modal-hdr {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-body { padding: 18px; }
+    .modal-ftr { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+    /* ---- Forms ---- */
+    .fg { margin-bottom: 14px; }
+    .fg:last-child { margin-bottom: 0; }
+    label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+    input, select, textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: var(--radius-sm); font-family: var(--font); font-size: 14px; color: var(--text);
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ---- Alert ---- */
+    .alert { padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 14px; font-size: 13px; }
+    .alert-err { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+    /* ---- Empty state ---- */
+    .empty { text-align: center; padding: 48px 24px; color: var(--text-muted); }
+    .empty p { margin-bottom: 16px; }
+
+    /* ---- Loading ---- */
+    .loading { color: var(--text-muted); text-align: center; padding: 32px; }
+
+    /* ---- Charts ---- */
+    .charts-row { display: grid; grid-template-columns: 1fr 1.6fr; gap: 14px; margin-top: 14px; }
+    @media (max-width: 680px) { .charts-row { grid-template-columns: 1fr; } }
+    .chart-wrap { padding: 16px 18px; position: relative; min-height: 200px;
+                  display: flex; align-items: center; justify-content: center; }
+    .chart-wrap canvas { max-width: 100%; }
+    .chart-empty { color: var(--text-muted); font-size: 13px; text-align: center; }
+
+    /* ---- Matches panel ---- */
+    .matches-panel { padding: 14px 18px 16px; }
+    .matches-hdr { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+    .matches-stat { font-size: 12px; color: var(--text-muted); }
+    .linked-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+      color: var(--primary); background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 1px 7px; }
+    .ph-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .ph-table th { text-align: left; padding: 5px 10px; font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted);
+      background: #f9fafb; border-bottom: 1px solid var(--border); }
+    .ph-table td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; }
+    .ph-table tr:last-child td { border-bottom: none; }
+    .ph-paid     { color: var(--success); font-weight: 600; }
+    .ph-upcoming { color: var(--primary); }
+    .ph-missing  { color: var(--warning); font-weight: 600; }
+
+    /* ---- Forecast bars ---- */
+    .bar-row { display: flex; align-items: center; gap: 10px; }
+    .bar-track { flex: 1; height: 7px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
+    .bar-fill  { height: 100%; border-radius: 4px; transition: width .3s; }
+
+    /* ---- Income row ---- */
+    .income-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 22px; }
+    .income-row .fg { margin-bottom: 0; flex: 0 0 220px; }
+
+    /* ---- Spinner ---- */
+    .spin {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.35); border-top-color: white;
+      border-radius: 50%; animation: rot .6s linear infinite;
+    }
+    @keyframes rot { to { transform: rotate(360deg); } }
+
+    /* ---- Toasts ---- */
+    .toast-wrap { position: fixed; bottom: 24px; right: 24px; z-index: 500; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 11px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,.18); min-width: 240px; max-width: 380px;
+      pointer-events: all; animation: toast-in .2s ease;
+    }
+    .toast-ok  { background: #111827; color: white; }
+    .toast-err { background: var(--danger); color: white; }
+    .toast-close { cursor: pointer; opacity: .65; font-size: 14px; background: none; border: none; color: inherit; padding: 0; flex-shrink: 0; }
+    .toast-close:hover { opacity: 1; }
+    @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ---- From-transaction picker ---- */
+    .txn-search { margin-bottom: 12px; }
+    .txn-view-toggle { display: flex; gap: 6px; margin-bottom: 12px; }
+    .tvt-btn {
+      padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 500;
+      cursor: pointer; border: 1px solid var(--border); background: white; color: var(--text-muted);
+      font-family: var(--font); transition: all .15s;
+    }
+    .tvt-btn.active { background: #111827; color: white; border-color: #111827; }
+    .txn-pick-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 9px 14px; border-bottom: 1px solid #f3f4f6;
+    }
+    .txn-pick-row:last-child { border-bottom: none; }
+    .txn-pick-row:hover { background: #fafafa; }
+    .txn-pick-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .txn-source {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; font-weight: 600; color: var(--primary);
+      background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px;
+      padding: 2px 7px; margin-bottom: 10px;
+    }
+    .freq-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 11px; font-weight: 600; background: #f0fdf4; color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+  </style>
+</head>
+<body>
+
+{# Inject Django context as a JS config object — keeps Vue delimiters clean #}
+<script>
+  window._PF = {
+    username: "{{ request.user.username|escapejs }}",
+    logoutUrl: "{% url 'logout' %}",
+    plaidConfigured: {{ plaid_configured|yesno:"true,false" }}
+  };
+</script>
+
+<div id="app">
+  <!-- Header -->
+  <header class="app-header">
+    <div class="app-logo">PF<span>App</span></div>
+    <div class="hdr-right">
+      <span>[[ username ]]</span>
+      <a :href="logoutUrl">Sign out</a>
+    </div>
+  </header>
+
+  <!-- Nav tabs -->
+  <nav class="app-nav">
+    <div class="nav-tab" :class="{ active: tab === 'accounts' }" @click="tab = 'accounts'">Accounts</div>
+    <div class="nav-tab" :class="{ active: tab === 'expenses' }" @click="tab = 'expenses'">Expenses</div>
+    <div class="nav-tab" :class="{ active: tab === 'income' }" @click="tab = 'income'">Income</div>
+    <div class="nav-tab" :class="{ active: tab === 'forecast' }" @click="tab = 'forecast'">Forecast</div>
+  </nav>
+
+  <main class="app-body">
+
+    <!-- ================================================================
+         ACCOUNTS TAB
+         ================================================================ -->
+    <div v-if="tab === 'accounts'">
+      <div v-if="items.length" class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Institutions</div>
+          <div class="stat-value">[[ items.length ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Accounts</div>
+          <div class="stat-value">[[ totalAccounts ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Net Worth</div>
+          <div class="stat-value" :class="netWorth >= 0 ? 'pos' : 'neg'">[[ fmt(netWorth) ]]</div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <span class="sec-title">Connected Institutions</span>
+        <button class="btn btn-primary" @click="connectAccount" :disabled="connecting">
+          <span v-if="connecting"><span class="spin"></span>&nbsp;Connecting…</span>
+          <span v-else>+ Connect Account</span>
+        </button>
+      </div>
+
+      <div v-if="acctError" class="alert alert-err">[[ acctError ]]</div>
+
+      <div v-if="loadingAccts" class="loading">Loading accounts…</div>
+
+      <div v-else-if="!items.length" class="card">
+        <div class="empty">
+          <p>No accounts connected yet.</p>
+          <button class="btn btn-primary" @click="connectAccount" :disabled="connecting">
+            + Connect your first account
+          </button>
+        </div>
+      </div>
+
+      <div v-else class="acct-grid">
+        <div class="acct-card" v-for="item in items" :key="item.id">
+          <div class="acct-card-hdr">
+            <div>
+              <div class="inst-name">[[ item.institution ]]</div>
+              <div class="inst-sub">Synced [[ item.last_sync ? ago(item.last_sync) : 'never' ]]</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="badge" :class="statusBadge(item.status)">[[ item.status ]]</span>
+              <button class="btn btn-sm btn-ghost" @click="refreshItem(item.id)" :disabled="!!refreshing[item.id]">
+                [[ refreshing[item.id] ? '…' : 'Refresh' ]]
+              </button>
+            </div>
+          </div>
+          <div v-for="a in item.accounts" :key="a.id" class="acct-row">
+            <div>
+              <div class="acct-name">[[ a.name ]]<span v-if="a.mask" style="font-weight:400;color:var(--text-muted)"> ••[[ a.mask ]]</span></div>
+              <div class="acct-sub">[[ cap(a.type) ]]<span v-if="a.subtype"> · [[ cap(a.subtype) ]]</span></div>
+            </div>
+            <div class="acct-bal" :class="isLiability(a) ? 'neg' : ''">[[ fmt(parseFloat(a.current_balance)) ]]</div>
+          </div>
+          <div v-if="!item.accounts.length" class="acct-row" style="color:var(--text-muted);font-size:13px">No accounts imported</div>
+        </div>
+      </div>
+
+      <!-- Recent transactions -->
+      <div v-if="txnError" class="alert alert-err" style="margin-top:16px">[[ txnError ]]</div>
+      <div v-if="transactions.length" style="margin-top:24px">
+        <div class="sec-hdr">
+          <span class="sec-title">Recent Transactions</span>
+          <span style="font-size:12px;color:var(--text-muted)">[[ transactions.length ]]<template v-if="txnTotal > transactions.length"> of [[ txnTotal ]]</template> transaction<template v-if="transactions.length !== 1">s</template></span>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Name</th>
+                  <th>Account</th>
+                  <th style="text-align:right">Amount</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="t in transactions" :key="t.id">
+                  <td style="color:var(--text-muted)">[[ t.date ]]</td>
+                  <td style="font-weight:500">[[ t.merchant_name || t.name ]]</td>
+                  <td style="color:var(--text-muted)">[[ t.account ]]<span v-if="t.account_mask"> ••[[ t.account_mask ]]</span></td>
+                  <td style="text-align:right;font-weight:500" :style="{ color: parseFloat(t.amount) < 0 ? 'var(--success)' : 'var(--text)' }">
+                    [[ fmt(parseFloat(t.amount)) ]]
+                  </td>
+                  <td><span v-if="t.pending" class="badge b-yellow">Pending</span></td>
+                  <td>
+                    <button class="btn btn-sm btn-ghost" @click="openFormFromTxn(t)" title="Add as expense">+ Expense</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         EXPENSES TAB
+         ================================================================ -->
+    <div v-if="tab === 'expenses'">
+      <div class="sec-hdr">
+        <div class="sub-tabs">
+          <div class="sub-tab" :class="{ active: expTab === 'recurring' }" @click="expTab = 'recurring'">Recurring</div>
+          <div class="sub-tab" :class="{ active: expTab === 'onetime'   }" @click="expTab = 'onetime'">One-time</div>
+          <div class="sub-tab" :class="{ active: expTab === 'summary'   }" @click="expTab = 'summary'">Summary</div>
+          <div class="sub-tab" :class="{ active: expTab === 'from-txn'  }" @click="expTab = 'from-txn'">From Transaction</div>
+        </div>
+        <button class="btn btn-primary" v-if="expTab !== 'from-txn' && expTab !== 'summary'" @click="openForm(null)">+ Add Expense</button>
+      </div>
+
+      <div v-if="expTab === 'recurring'" class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Monthly Total</div>
+          <div class="stat-value neg">[[ fmt(totalMonthly) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Annual Total</div>
+          <div class="stat-value neg">[[ fmt(totalMonthly * 12) ]]</div>
+        </div>
+      </div>
+
+      <div v-if="loadingExp && expTab !== 'from-txn' && expTab !== 'summary'" class="loading">Loading expenses…</div>
+
+      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary' && !visibleExpenses.length" class="card">
+        <div class="empty">
+          <p>No [[ expTab === 'recurring' ? 'recurring' : 'one-time' ]] expenses yet.</p>
+        </div>
+      </div>
+
+      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary'" class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th style="text-align:right">Per Payment</th>
+                <th v-if="expTab === 'recurring'">Frequency</th>
+                <th v-if="expTab === 'recurring'" style="text-align:right">Monthly Budget</th>
+                <th v-if="expTab === 'onetime'">Due Date</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="e in visibleExpenses" :key="e.id">
+                <tr>
+                  <td style="font-weight:500">
+                    [[ e.name ]]
+                    <div v-if="e.linked_merchant" style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">
+                      <span v-for="tag in e.linked_merchant.split('|').map(s=>s.trim()).filter(Boolean)" :key="tag"
+                            class="linked-chip" style="width:fit-content">
+                        🔗 [[ tag ]]
+                      </span>
+                    </div>
+                  </td>
+                  <td><span class="badge b-gray">[[ e.category_display ]]</span></td>
+                  <td style="text-align:right">[[ fmt(parseFloat(e.amount)) ]]</td>
+                  <td v-if="expTab === 'recurring'">[[ e.frequency_display ]]</td>
+                  <td v-if="expTab === 'recurring'" style="text-align:right;color:var(--text-muted)">[[ fmt(parseFloat(e.monthly_amount)) ]]</td>
+                  <td v-if="expTab === 'onetime'">[[ e.due_date || '—' ]]</td>
+                  <td>
+                    <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+                      <template v-if="e.linked_merchant">
+                        <span v-if="nextPayment(e)" class="badge" :class="paymentStatusBadge(nextPayment(e))" style="cursor:default">
+                          [[ paymentStatusLabel(nextPayment(e)) ]]
+                        </span>
+                        <button class="btn btn-sm" :class="expandedExpenseId === e.id ? 'btn-primary' : 'btn-ghost'" @click="toggleExpand(e.id)">
+                          [[ expenseMatches(e).length ]] match[[ expenseMatches(e).length !== 1 ? 'es' : '' ]]
+                        </button>
+                      </template>
+                      <template v-if="pendingDeleteId === e.id">
+                        <span style="font-size:12px;color:var(--text-muted)">Delete?</span>
+                        <button class="btn btn-sm" style="background:#fef2f2;border:1px solid #fca5a5;color:var(--danger)" @click="removeExpense(e.id)">Yes</button>
+                        <button class="btn btn-sm btn-ghost" @click="pendingDeleteId = null">No</button>
+                      </template>
+                      <template v-else>
+                        <button class="btn btn-sm btn-ghost" @click="openForm(e)">Edit</button>
+                        <button class="btn btn-sm btn-del" @click="pendingDeleteId = e.id">Delete</button>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
+                <!-- Matches / payment history panel -->
+                <tr v-if="expandedExpenseId === e.id">
+                  <td :colspan="expTab === 'recurring' ? 6 : 5" style="padding:0;background:#f8fafc;border-bottom:2px solid var(--primary)">
+                    <div class="matches-panel">
+                      <div class="matches-hdr">
+                        <span style="font-size:13px;font-weight:600">🔗 Linked:
+                          <span v-for="(tag, i) in e.linked_merchant.split('|').map(s=>s.trim()).filter(Boolean)" :key="tag">
+                            <span style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:1px 7px;font-size:12px">[[ tag ]]</span>
+                          </span>
+                        </span>
+                        <span class="matches-stat">[[ expenseMatches(e).length ]] matched transaction[[ expenseMatches(e).length !== 1 ? 's' : '' ]]</span>
+                        <template v-if="expenseMatches(e).length">
+                          <span class="matches-stat">avg [[ fmt(expenseMatches(e).reduce((s,t) => s + Math.abs(parseFloat(t.amount)), 0) / expenseMatches(e).length) ]]</span>
+                          <span class="matches-stat">· budget [[ fmt(parseFloat(e.amount)) ]]</span>
+                        </template>
+                        <span v-if="nextPayment(e) && nextPayment(e).status === 'paid'" class="badge b-green">✓ Paid this period · next due [[ nextPayment(e).nextDate ]]</span>
+                        <span v-else-if="nextPayment(e) && nextPayment(e).status === 'overdue'" class="badge b-red">⚠ Overdue since [[ nextPayment(e).nextDate ]]</span>
+                      </div>
+                      <div v-if="!expenseMatches(e).length" style="color:var(--text-muted);font-size:12px;padding:4px 0">
+                        No imported transactions match any linked merchant. Connect an account or broaden the name.
+                      </div>
+                      <template v-else>
+                        <!-- Monthly with due_day → full payment calendar -->
+                        <table v-if="e.frequency === 'monthly' && e.due_day" class="ph-table">
+                          <thead><tr>
+                            <th>Month</th><th>Expected</th><th>Paid On</th>
+                            <th style="text-align:right">Actual</th>
+                            <th style="text-align:right">Variance</th>
+                            <th>Status</th>
+                          </tr></thead>
+                          <tbody>
+                            <tr v-for="row in paymentHistory(e)" :key="row.label">
+                              <td style="font-weight:500">[[ row.label ]]</td>
+                              <td style="color:var(--text-muted)">[[ fmt(row.expected) ]]</td>
+                              <td style="color:var(--text-muted)">[[ row.txnDate || '—' ]]</td>
+                              <td style="text-align:right;font-weight:500">[[ row.actual != null ? fmt(row.actual) : '—' ]]</td>
+                              <td style="text-align:right;font-size:11px" :style="{ color: row.variance == null ? '' : row.variance > 0.005 ? 'var(--danger)' : 'var(--success)' }">
+                                [[ row.variance != null ? (row.variance >= 0 ? '+' : '') + fmt(row.variance) : '—' ]]
+                              </td>
+                              <td :class="{ 'ph-paid': row.status==='paid', 'ph-upcoming': row.status==='upcoming', 'ph-missing': row.status==='missing' }">
+                                [[ row.status === 'paid' ? '✓ Paid' : row.status === 'upcoming' ? '⏳ Expected' : '⚠ Missing' ]]
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                        <!-- Other frequencies → recent matched transactions -->
+                        <table v-else class="ph-table">
+                          <thead><tr>
+                            <th>Date</th><th style="text-align:right">Amount</th>
+                            <th style="text-align:right">vs Budget</th><th>Status</th>
+                          </tr></thead>
+                          <tbody>
+                            <tr v-for="row in paymentHistory(e)" :key="row.label">
+                              <td>[[ row.txnDate ]]</td>
+                              <td style="text-align:right;font-weight:500">[[ fmt(row.actual) ]]</td>
+                              <td style="text-align:right;font-size:11px" :style="{ color: row.variance > 0.005 ? 'var(--danger)' : 'var(--success)' }">
+                                [[ (row.variance >= 0 ? '+' : '') + fmt(row.variance) ]]
+                              </td>
+                              <td class="ph-paid">✓ Paid</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Summary tab: budget vs actual by period -->
+      <div v-if="expTab === 'summary'">
+        <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:13px;color:var(--text-muted);margin-right:4px">Period:</span>
+          <template v-for="p in [{k:'week',l:'This Week'},{k:'month',l:'This Month'},{k:'last_month',l:'Last Month'},{k:'3months',l:'Last 3 Months'},{k:'year',l:'This Year'}]" :key="p.k">
+            <button class="btn" :class="expSummaryPeriod===p.k ? 'btn-primary' : 'btn-ghost'"
+                    @click="expSummaryPeriod=p.k" style="font-size:13px;padding:4px 14px">
+              [[ p.l ]]
+            </button>
+          </template>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Budgeted</div>
+            <div class="stat-value neg">[[ fmt(expSummaryTotals.budget) ]]</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">all expenses, prorated</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Actually Spent</div>
+            <div class="stat-value" :style="{color: expSummaryTotals.actual > expSummaryTotals.budget ? 'var(--danger)' : 'var(--success)'}">
+              [[ fmt(expSummaryTotals.actual) ]]
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">linked expenses only</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Over / Under Budget</div>
+            <div class="stat-value" :style="{color: expSummaryTotals.variance > 0.005 ? 'var(--danger)' : 'var(--success)'}">
+              [[ expSummaryTotals.variance >= 0 ? '+' : '' ]][[ fmt(expSummaryTotals.variance) ]]
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="tbl-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Expense</th>
+                  <th>Category</th>
+                  <th style="text-align:right">Budget</th>
+                  <th style="text-align:right">Actual</th>
+                  <th style="text-align:right">Variance</th>
+                  <th style="min-width:140px">vs Budget</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in expSummaryRows" :key="row.id">
+                  <td style="font-weight:500">
+                    [[ row.name ]]
+                    <span v-if="!row.linked_merchant" style="font-size:11px;color:var(--text-muted);margin-left:4px">· not linked</span>
+                  </td>
+                  <td><span class="badge b-gray">[[ row.category_display ]]</span></td>
+                  <td style="text-align:right;color:var(--text-muted)">[[ fmt(row.budget) ]]</td>
+                  <td style="text-align:right;font-weight:500">
+                    <span v-if="row.linked_merchant">[[ fmt(row.actual) ]]</span>
+                    <span v-else style="color:var(--text-muted)">—</span>
+                  </td>
+                  <td style="text-align:right;font-size:12px"
+                      :style="{color: !row.linked_merchant ? '' : row.variance > 0.005 ? 'var(--danger)' : 'var(--success)'}">
+                    <span v-if="row.linked_merchant">[[ row.variance >= 0 ? '+' : '' ]][[ fmt(row.variance) ]]</span>
+                    <span v-else style="color:var(--text-muted)">—</span>
+                  </td>
+                  <td>
+                    <div v-if="row.linked_merchant" style="display:flex;align-items:center;gap:6px">
+                      <div style="flex:1;background:#f1f5f9;border-radius:4px;height:10px;overflow:hidden">
+                        <div :style="{
+                          width: Math.min(row.pct, 100) + '%',
+                          height: '100%',
+                          background: row.pct > 100 ? 'var(--danger)' : row.pct > 80 ? '#f59e0b' : 'var(--success)',
+                          transition: 'width 0.3s'
+                        }"></div>
+                      </div>
+                      <span style="font-size:11px;color:var(--text-muted);min-width:30px">[[ Math.round(row.pct) ]]%</span>
+                    </div>
+                    <button v-else class="btn btn-sm btn-ghost" style="font-size:11px" @click="expTab='recurring';openForm(expenses.find(e=>e.id===row.id))">Link</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- From-transaction picker -->
+      <div v-if="expTab === 'from-txn'">
+        <div v-if="!transactions.length" class="card">
+          <div class="empty"><p>No transactions imported yet. Connect an account first.</p></div>
+        </div>
+        <div v-else class="card">
+          <div class="card-body">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+              <input style="flex:1;margin-bottom:0" type="search" v-model="txnSearch" placeholder="Search…">
+              <div class="txn-view-toggle">
+                <button class="tvt-btn" :class="{ active: txnView === 'individual' }" @click="txnView = 'individual'">Individual</button>
+                <button class="tvt-btn" :class="{ active: txnView === 'merchant'   }" @click="txnView = 'merchant'  ">By Merchant</button>
+              </div>
+            </div>
+
+            <!-- Individual view -->
+            <template v-if="txnView === 'individual'">
+              <div v-if="!filteredTxnsForPicker.length" style="color:var(--text-muted);font-size:13px">No matching transactions.</div>
+              <div v-for="t in filteredTxnsForPicker" :key="t.id" class="txn-pick-row">
+                <div>
+                  <div style="font-weight:500;font-size:13px">[[ t.merchant_name || t.name ]]</div>
+                  <div class="txn-pick-meta">[[ t.date ]] · [[ t.account ]]<span v-if="t.account_mask"> ••[[ t.account_mask ]]</span></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="font-weight:600;font-size:14px">[[ fmt(Math.abs(parseFloat(t.amount))) ]]</span>
+                  <button class="btn btn-sm btn-primary" @click="openFormFromTxn(t)">+ Add Expense</button>
+                </div>
+              </div>
+            </template>
+
+            <!-- By Merchant view -->
+            <template v-if="txnView === 'merchant'">
+              <div v-if="!filteredMerchants.length" style="color:var(--text-muted);font-size:13px">No matching merchants.</div>
+              <div v-for="m in filteredMerchants" :key="m.key" class="txn-pick-row">
+                <div>
+                  <div style="font-weight:600;font-size:13px">[[ m.name ]]</div>
+                  <div class="txn-pick-meta">
+                    [[ m.count ]] charge[[ m.count > 1 ? 's' : '' ]]
+                    &nbsp;·&nbsp; avg [[ fmt(m.avg) ]]
+                    &nbsp;·&nbsp; last [[ m.lastDate ]]
+                    &nbsp;·&nbsp; <span class="freq-chip">[[ m.freqLabel ]]</span>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <span style="font-weight:600;font-size:14px">[[ fmt(m.avg) ]]</span>
+                  <button class="btn btn-sm btn-primary" @click="openFormFromMerchant(m)">+ Add Expense</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         INCOME TAB
+         ================================================================ -->
+    <div v-if="tab === 'income'">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="font-size:15px;font-weight:600;margin:0">Income Sources</h2>
+        <button class="btn btn-primary" @click="openIncomeForm()">+ Add Income Source</button>
+      </div>
+
+      <div v-if="loadingInc" style="color:var(--text-muted);padding:20px 0">Loading…</div>
+
+      <div v-else-if="!incomeSources.length" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius-sm);padding:14px 16px;color:#166534;font-size:13px;margin-bottom:16px">
+        No income sources yet. Add your salary, bonuses, investment income, etc.
+      </div>
+
+      <div v-else class="card" style="margin-bottom:14px">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Frequency</th>
+                <th style="text-align:right">Per Payment</th>
+                <th style="text-align:right">Monthly</th>
+                <th style="text-align:right">Annual</th>
+                <th>Next Payment</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="src in incomeSources" :key="src.id">
+                <tr>
+                  <td style="font-weight:500">[[ src.name ]]</td>
+                  <td><span class="badge b-green">[[ src.category_display ]]</span></td>
+                  <td style="font-size:13px">[[ src.frequency_display ]]</td>
+                  <td style="text-align:right">[[ fmt(parseFloat(src.amount)) ]]</td>
+                  <td style="text-align:right;color:var(--success);font-weight:500">[[ fmt(parseFloat(src.monthly_amount)) ]]</td>
+                  <td style="text-align:right;color:var(--text-muted)">[[ fmt(parseFloat(src.annual_amount)) ]]</td>
+                  <td style="font-size:12px;color:var(--text-muted)">[[ nextIncomeDate(src) ]]</td>
+                  <td>
+                    <div style="display:flex;gap:6px;justify-content:flex-end">
+                      <button class="btn btn-sm btn-ghost" @click="openIncomeForm(src)">Edit</button>
+                      <button v-if="pendingDeleteIncomeId !== src.id" class="btn btn-sm btn-ghost" style="color:var(--danger)" @click="pendingDeleteIncomeId = src.id">Delete</button>
+                      <template v-else>
+                        <button class="btn btn-sm btn-danger" @click="removeIncome(src.id)">Confirm</button>
+                        <button class="btn btn-sm btn-ghost" @click="pendingDeleteIncomeId = null">Cancel</button>
+                      </template>
+                    </div>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="incomeSources.length" class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Monthly Income</div>
+          <div class="stat-value pos">[[ fmt(monthlyIncome) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Annual Income</div>
+          <div class="stat-value pos">[[ fmt(monthlyIncome * 12) ]]</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         FORECAST TAB
+         ================================================================ -->
+    <div v-if="tab === 'forecast'">
+      <div v-if="!monthlyIncome" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:13px;color:#1e40af">
+        Add income sources in the <a href="#" @click.prevent="tab='income'" style="color:#1d4ed8;font-weight:600">Income tab</a> to see your full forecast.
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">Monthly Income</div>
+          <div class="stat-value pos">[[ fmt(monthlyIncome) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Monthly Expenses</div>
+          <div class="stat-value neg">[[ fmt(totalMonthly) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Monthly Net</div>
+          <div class="stat-value" :class="net >= 0 ? 'pos' : 'neg'">[[ fmt(net) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Annual Net</div>
+          <div class="stat-value" :class="net >= 0 ? 'pos' : 'neg'">[[ fmt(net * 12) ]]</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Spending by Category</span></div>
+          <div class="chart-wrap">
+            <canvas id="donutChart" style="max-height:280px"></canvas>
+            <div class="chart-empty" v-if="!catBreakdown.length">Add recurring expenses to see breakdown.</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">6-Month Cash Flow</span></div>
+          <div class="chart-wrap" style="display:block">
+            <canvas id="cashflowChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:14px">
+        <div class="card-header">
+          <span class="card-title">Expense Breakdown by Category</span>
+        </div>
+        <div v-if="!catBreakdown.length" class="card-body" style="color:var(--text-muted)">
+          Add recurring expenses to see the breakdown.
+        </div>
+        <div v-else class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th style="text-align:right">Monthly</th>
+                <th style="text-align:right">Annual</th>
+                <th style="width:220px">% of Expenses</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in catBreakdown" :key="c.category">
+                <td style="font-weight:500">[[ c.label ]]</td>
+                <td style="text-align:right">[[ fmt(c.monthly) ]]</td>
+                <td style="text-align:right;color:var(--text-muted)">[[ fmt(c.monthly * 12) ]]</td>
+                <td>
+                  <div class="bar-row">
+                    <div class="bar-track">
+                      <div class="bar-fill"
+                        :style="{ width: c.pct + '%', background: monthlyIncome > 0 && c.monthly > monthlyIncome * 0.35 ? 'var(--danger)' : 'var(--primary)' }">
+                      </div>
+                    </div>
+                    <span style="font-size:12px;color:var(--text-muted);min-width:38px;text-align:right">[[ c.pct ]]%</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div v-if="upcoming.length" class="card" style="margin-top:14px">
+        <div class="card-header"><span class="card-title">Upcoming One-time Expenses</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Category</th><th style="text-align:right">Amount</th><th>Due Date</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="e in upcoming" :key="e.id">
+                <td style="font-weight:500">[[ e.name ]]</td>
+                <td><span class="badge b-gray">[[ e.category_display ]]</span></td>
+                <td style="text-align:right">[[ fmt(parseFloat(e.amount)) ]]</td>
+                <td>[[ e.due_date ]]</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Toasts -->
+  <div class="toast-wrap">
+    <div class="toast" :class="`toast-${t.type}`" v-for="t in toasts" :key="t.id">
+      <span>[[ t.message ]]</span>
+      <button class="toast-close" @click="dismissToast(t.id)" aria-label="Dismiss">✕</button>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       EXPENSE MODAL
+       ================================================================ -->
+  <div class="overlay" v-if="showModal" @click.self="closeForm">
+    <div class="modal">
+      <div class="modal-hdr">
+        <span class="modal-title">[[ editId ? 'Edit Expense' : 'Add Expense' ]]</span>
+        <button class="btn btn-sm btn-ghost" @click="closeForm">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-err" v-if="formErr">[[ formErr ]]</div>
+        <div v-if="form._fromTxn" class="txn-source">↗ Pre-filled from transaction</div>
+        <div class="fg">
+          <label>Name *</label>
+          <input type="text" v-model="form.name" placeholder="e.g. Electric Bill" autofocus>
+        </div>
+        <div class="grid-2">
+          <div class="fg">
+            <label>Amount *</label>
+            <input type="number" v-model="form.amount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="fg">
+            <label>Frequency *</label>
+            <select v-model="form.frequency">
+              <option value="one_time">One-time</option>
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Category</label>
+          <select v-model="form.category">
+            <option value="housing">Housing</option>
+            <option value="utilities">Utilities</option>
+            <option value="food">Food &amp; Groceries</option>
+            <option value="transport">Transportation</option>
+            <option value="gas">Gas</option>
+            <option value="insurance">Insurance</option>
+            <option value="subscriptions">Subscriptions</option>
+            <option value="debt">Debt Payments</option>
+            <option value="medical">Medical</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="grid-2" v-if="form.frequency !== 'one_time'">
+          <div class="fg">
+            <label>Due Day of Month</label>
+            <input type="number" v-model="form.due_day" min="1" max="31" placeholder="e.g. 15">
+          </div>
+        </div>
+        <div class="fg" v-if="form.frequency === 'one_time'">
+          <label>Due Date</label>
+          <input type="date" v-model="form.due_date">
+        </div>
+        <div class="fg">
+          <label>Link to Merchants <span style="font-weight:400;color:var(--text-muted)">(optional — auto-matches imported transactions)</span></label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:36px;padding:4px 8px;border:1px solid #d1d5db;border-radius:var(--radius-sm);background:#fff" @click="$refs.merchantInput.focus()">
+            <span v-for="tag in linkedMerchantTags" :key="tag"
+                  style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 8px;font-size:12px;white-space:nowrap">
+              [[ tag ]]
+              <button type="button" @click.stop="removeLinkedMerchant(tag)" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:#6b7280">✕</button>
+            </span>
+            <input ref="merchantInput" type="text" v-model="merchantTagInput"
+                   @keydown.enter.prevent="addLinkedMerchantTag"
+                   list="merchant-datalist"
+                   placeholder="Type or pick…"
+                   style="border:none;outline:none;flex:1;min-width:120px;padding:0;font-size:14px;background:transparent">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="openLinkPicker"
+                    :disabled="!transactions.length">+ Pick from transactions</button>
+          </div>
+          <datalist id="merchant-datalist">
+            <option v-for="m in linkMerchants" :value="m.name" :key="m.name"></option>
+          </datalist>
+        </div>
+        <div class="fg">
+          <label>Notes</label>
+          <textarea v-model="form.notes" rows="2" placeholder="Optional…"></textarea>
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn btn-ghost" @click="closeForm">Cancel</button>
+        <button class="btn btn-primary" @click="saveExpense" :disabled="saving">
+          [[ saving ? 'Saving…' : (editId ? 'Save Changes' : 'Add Expense') ]]
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       LINK MERCHANT PICKER MODAL
+       ================================================================ -->
+  <div class="overlay" v-if="showLinkModal" @click.self="showLinkModal = false">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-hdr">
+        <span class="modal-title">Pick a Merchant</span>
+        <button class="btn btn-sm btn-ghost" @click="showLinkModal = false">✕</button>
+      </div>
+      <div class="modal-body" style="padding-bottom:6px">
+        <input type="search" v-model="linkSearch" placeholder="Search merchants…" style="margin-bottom:10px">
+        <div style="max-height:340px;overflow-y:auto;margin:0 -18px">
+          <div v-if="!linkMerchants.length" style="color:var(--text-muted);font-size:13px;padding:8px 18px">
+            No merchants found.
+          </div>
+          <div v-for="m in linkMerchants" :key="m.name"
+               :style="{ padding:'9px 18px', borderBottom:'1px solid #f3f4f6', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', background: linkedMerchantTags.includes(m.name) ? '#f0fdf4' : '' }"
+               @click="selectLinkedMerchant(m.name)"
+               @mouseover="$event.currentTarget.style.background = linkedMerchantTags.includes(m.name) ? '#dcfce7' : '#f9fafb'"
+               @mouseout="$event.currentTarget.style.background = linkedMerchantTags.includes(m.name) ? '#f0fdf4' : ''">
+            <span style="font-weight:500;font-size:13px">
+              <span v-if="linkedMerchantTags.includes(m.name)" style="color:#16a34a;margin-right:4px">✓</span>[[ m.name ]]
+            </span>
+            <span style="font-size:11px;color:var(--text-muted)">[[ m.count ]] txn[[ m.count !== 1 ? 's' : '' ]] · avg [[ fmt(m.avg) ]]</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ================================================================
+       INCOME SOURCE MODAL
+       ================================================================ -->
+  <div class="overlay" v-if="showIncomeModal" @click.self="closeIncomeForm">
+    <div class="modal">
+      <div class="modal-hdr">
+        <span class="modal-title">[[ editIncomeId ? 'Edit Income Source' : 'Add Income Source' ]]</span>
+        <button class="btn btn-sm btn-ghost" @click="closeIncomeForm">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-err" v-if="incomeFormErr">[[ incomeFormErr ]]</div>
+        <div class="fg">
+          <label>Name *</label>
+          <input type="text" v-model="incomeForm.name" placeholder="e.g. Boeing Salary" autofocus>
+        </div>
+        <div class="grid-2">
+          <div class="fg">
+            <label>Amount per Payment *</label>
+            <input type="number" v-model="incomeForm.amount" min="0" step="0.01" placeholder="0.00">
+          </div>
+          <div class="fg">
+            <label>Frequency *</label>
+            <select v-model="incomeForm.frequency">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Bi-weekly (every other week)</option>
+              <option value="semimonthly">Semi-monthly (1st &amp; 15th)</option>
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="annual">Annual</option>
+              <option value="one_time">One-time</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg">
+          <label>Category</label>
+          <select v-model="incomeForm.category">
+            <option value="salary">Salary</option>
+            <option value="bonus">Bonus</option>
+            <option value="freelance">Freelance / Contract</option>
+            <option value="investment">Investment / Dividends</option>
+            <option value="rental">Rental Income</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <!-- Biweekly / Weekly: anchor pay date -->
+        <div class="fg" v-if="incomeForm.frequency === 'biweekly' || incomeForm.frequency === 'weekly'">
+          <label>Anchor Pay Date <span style="font-weight:400;color:var(--text-muted)">(a known pay date to anchor the schedule)</span></label>
+          <input type="date" v-model="incomeForm.next_pay_date">
+        </div>
+        <!-- Monthly: day of month -->
+        <div class="fg" v-if="incomeForm.frequency === 'monthly'">
+          <label>Day of Month <span style="font-weight:400;color:var(--text-muted)">(1–28)</span></label>
+          <input type="number" v-model.number="incomeForm.day_of_month" min="1" max="28" placeholder="e.g. 15">
+        </div>
+        <!-- Quarterly / Annual / One-time: expected date -->
+        <div class="fg" v-if="['quarterly','annual','one_time'].includes(incomeForm.frequency)">
+          <label>Expected Date</label>
+          <input type="date" v-model="incomeForm.next_pay_date">
+        </div>
+        <div class="fg">
+          <label>Notes</label>
+          <input type="text" v-model="incomeForm.notes" placeholder="Optional">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" @click="closeIncomeForm">Cancel</button>
+        <button class="btn btn-primary" @click="saveIncomeSource" :disabled="incomeSaving">
+          [[ incomeSaving ? 'Saving…' : (editIncomeId ? 'Save Changes' : 'Add Income Source') ]]
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const { createApp, ref, reactive, computed, onMounted, watch, nextTick } = Vue;
+
+const app = createApp({
+  setup() {
+    const cfg = window._PF;
+
+    // ---- State ----
+    const tab     = ref('accounts');
+    const expTab  = ref('recurring');
+    const username  = ref(cfg.username);
+    const logoutUrl = ref(cfg.logoutUrl);
+
+    // Accounts
+    const items        = ref([]);
+    const transactions = ref([]);
+    const loadingAccts = ref(true);
+    const connecting   = ref(false);
+    const refreshing   = reactive({});
+
+    // Expenses
+    const expenses   = ref([]);
+    const loadingExp = ref(true);
+    const showModal  = ref(false);
+    const editId     = ref(null);
+    const formErr    = ref('');
+    const saving     = ref(false);
+    const form       = reactive({ name: '', amount: '', category: 'other', frequency: 'monthly', due_day: '', due_date: '', notes: '', linked_merchant: '', _fromTxn: false });
+    const txnSearch  = ref('');
+    const txnView    = ref('merchant');  // default to grouped view
+    const txnTotal   = ref(0);
+
+    // Income sources
+    const incomeSources       = ref([]);
+    const loadingInc          = ref(true);
+    const showIncomeModal     = ref(false);
+    const editIncomeId        = ref(null);
+    const incomeFormErr       = ref('');
+    const incomeSaving        = ref(false);
+    const pendingDeleteIncomeId = ref(null);
+    const incomeForm          = reactive({ name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '' });
+
+    // Notifications & UI state
+    const toasts          = ref([]);
+    let   _toastId        = 0;
+    const pendingDeleteId = ref(null);
+    const expandedExpenseId = ref(null);
+    const expSummaryPeriod = ref('month');
+    const showLinkModal   = ref(false);
+    const linkSearch      = ref('');
+    const merchantTagInput = ref('');
+    // Derived from form.linked_merchant (comma-separated) for the tag display
+    const linkedMerchantTags = computed(() =>
+      form.linked_merchant
+        ? form.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : []
+    );
+    const acctError       = ref('');
+    const txnError        = ref('');
+
+    // Forecast income (derived from income sources)
+    const monthlyIncome = computed(() => incomeSources.value.reduce((s, src) => s + parseFloat(src.monthly_amount), 0));
+
+    // ---- Computed ----
+    const totalAccounts = computed(() => items.value.reduce((s, i) => s + i.accounts.length, 0));
+
+    const netWorth = computed(() => {
+      let n = 0;
+      for (const item of items.value)
+        for (const a of item.accounts)
+          n += isLiability(a) ? -Math.abs(parseFloat(a.current_balance)) : parseFloat(a.current_balance);
+      return n;
+    });
+
+    const recurring = computed(() => expenses.value.filter(e => e.frequency !== 'one_time'));
+    const onetime   = computed(() => expenses.value.filter(e => e.frequency === 'one_time'));
+
+    const visibleExpenses = computed(() => expTab.value === 'recurring' ? recurring.value : onetime.value);
+
+    const totalMonthly = computed(() => recurring.value.reduce((s, e) => s + parseFloat(e.monthly_amount), 0));
+
+    const net = computed(() => monthlyIncome.value - totalMonthly.value);
+
+    // --- Summary tab: period bounds and budget vs actual ---
+    const expSummaryBounds = computed(() => {
+      const today = new Date();
+      const y = today.getFullYear(), m = today.getMonth(), d = today.getDate();
+      if (expSummaryPeriod.value === 'week') {
+        const dow = today.getDay();
+        const mon = new Date(y, m, d - (dow === 0 ? 6 : dow - 1));
+        const sun = new Date(mon.getTime() + 6 * 86400000);
+        return { start: mon.toISOString().split('T')[0], end: sun.toISOString().split('T')[0], months: 7 / 30.4375 };
+      }
+      if (expSummaryPeriod.value === 'month') {
+        return { start: `${y}-${String(m+1).padStart(2,'0')}-01`, end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 1 };
+      }
+      if (expSummaryPeriod.value === 'last_month') {
+        const pm = m === 0 ? 11 : m - 1, py = m === 0 ? y - 1 : y;
+        return { start: `${py}-${String(pm+1).padStart(2,'0')}-01`, end: new Date(py, pm+1, 0).toISOString().split('T')[0], months: 1 };
+      }
+      if (expSummaryPeriod.value === '3months') {
+        const start = new Date(y, m - 2, 1);
+        return { start: start.toISOString().split('T')[0], end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 3 };
+      }
+      // year
+      return { start: `${y}-01-01`, end: `${y}-12-31`, months: 12 };
+    });
+
+    const expSummaryRows = computed(() => {
+      const { start, end, months } = expSummaryBounds.value;
+      return expenses.value.map(e => {
+        const budget = parseFloat(e.monthly_amount) * months;
+        const matched = expenseMatches(e);
+        const actual = matched
+          .filter(t => t.date >= start && t.date <= end)
+          .reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0);
+        const variance = actual - budget;
+        const pct = budget > 0 ? Math.min((actual / budget) * 100, 150) : 0;
+        return { ...e, budget, actual, variance, pct };
+      });
+    });
+
+    const expSummaryTotals = computed(() => {
+      const rows = expSummaryRows.value;
+      const budget = rows.reduce((s, r) => s + r.budget, 0);
+      const actual = rows.filter(r => r.linked_merchant).reduce((s, r) => s + r.actual, 0);
+      return { budget, actual, variance: actual - budget };
+    });
+
+    const catBreakdown = computed(() => {
+      const map = {};
+      for (const e of recurring.value) {
+        if (!map[e.category]) map[e.category] = { category: e.category, label: e.category_display, monthly: 0 };
+        map[e.category].monthly += parseFloat(e.monthly_amount);
+      }
+      const total = totalMonthly.value;
+      return Object.values(map)
+        .sort((a, b) => b.monthly - a.monthly)
+        .map(c => ({ ...c, pct: total > 0 ? Math.round((c.monthly / total) * 100) : 0 }));
+    });
+
+    const upcoming = computed(() => {
+      const today = new Date().toISOString().split('T')[0];
+      return onetime.value.filter(e => e.due_date && e.due_date >= today)
+        .sort((a, b) => a.due_date.localeCompare(b.due_date));
+    });
+
+    const filteredTxnsForPicker = computed(() => {
+      const q = txnSearch.value.trim().toLowerCase();
+      if (!q) return transactions.value;
+      return transactions.value.filter(t =>
+        (t.merchant_name || t.name || '').toLowerCase().includes(q) ||
+        (t.account || '').toLowerCase().includes(q)
+      );
+    });
+
+    // Merchants for the link picker (with search, sorted by frequency)
+    const linkMerchants = computed(() => {
+      const q = linkSearch.value.trim().toLowerCase();
+      const map = {};
+      for (const t of transactions.value) {
+        const name = (t.merchant_name || t.name || '').trim();
+        if (!name) continue;
+        if (q && !name.toLowerCase().includes(q)) continue;
+        if (!map[name]) map[name] = { name, count: 0, total: 0 };
+        map[name].count++;
+        map[name].total += Math.abs(parseFloat(t.amount));
+      }
+      return Object.values(map)
+        .map(m => ({ ...m, avg: m.total / m.count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 60);
+    });
+
+    // Detect frequency from avg days between charges
+    function detectFrequency(dates) {
+      if (dates.length < 2) return { freq: 'one_time', label: 'One-time' };
+      const sorted = [...dates].sort();
+      let totalDays = 0;
+      for (let i = 1; i < sorted.length; i++)
+        totalDays += (new Date(sorted[i]) - new Date(sorted[i-1])) / 86400000;
+      const avgDays = totalDays / (sorted.length - 1);
+      if (avgDays <= 9)   return { freq: 'weekly',    label: 'Weekly'    };
+      if (avgDays <= 18)  return { freq: 'biweekly',  label: 'Bi-weekly' };
+      if (avgDays <= 45)  return { freq: 'monthly',   label: 'Monthly'   };
+      if (avgDays <= 120) return { freq: 'quarterly', label: 'Quarterly' };
+      return               { freq: 'annual',    label: 'Annual'    };
+    }
+
+    const filteredMerchants = computed(() => {
+      const q = txnSearch.value.trim().toLowerCase();
+      const map = {};
+      for (const t of transactions.value) {
+        const name = (t.merchant_name || t.name || '').trim();
+        if (!name) continue;
+        if (q && !name.toLowerCase().includes(q) && !(t.account || '').toLowerCase().includes(q)) continue;
+        if (!map[name]) map[name] = { key: name, name, amounts: [], dates: [], category: t.category };
+        map[name].amounts.push(Math.abs(parseFloat(t.amount)));
+        map[name].dates.push(t.date);
+      }
+      return Object.values(map)
+        .map(m => {
+          const avg = m.amounts.reduce((s, v) => s + v, 0) / m.amounts.length;
+          const { freq, label: freqLabel } = detectFrequency(m.dates);
+          const lastDate = [...m.dates].sort().at(-1);
+          return { ...m, count: m.amounts.length, avg, freq, freqLabel, lastDate };
+        })
+        .filter(m => m.count > 0)
+        .sort((a, b) => b.count - a.count || b.avg - a.avg);
+    });
+
+    // ---- Helpers ----
+    function showToast(message, type = 'ok') {
+      const id = ++_toastId;
+      toasts.value.push({ id, message, type });
+      setTimeout(() => dismissToast(id), 4500);
+    }
+    function dismissToast(id) {
+      toasts.value = toasts.value.filter(t => t.id !== id);
+    }
+
+    function cookie(name) {
+      const p = `; ${document.cookie}`.split(`; ${name}=`);
+      return p.length === 2 ? p.pop().split(';').shift() : '';
+    }
+
+    function fmt(v) {
+      if (isNaN(v)) return '$0.00';
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v);
+    }
+
+    function ago(iso) {
+      if (!iso) return 'never';
+      const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+      if (m < 2)  return 'just now';
+      if (m < 60) return `${m}m ago`;
+      const h = Math.floor(m / 60);
+      if (h < 24) return `${h}h ago`;
+      return `${Math.floor(h / 24)}d ago`;
+    }
+
+    function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+
+    function statusBadge(s) {
+      return { active: 'b-green', error: 'b-red', requires_attention: 'b-yellow', removed: 'b-gray' }[s] || 'b-gray';
+    }
+
+    function isLiability(a) { return a.type === 'credit' || a.type === 'loan'; }
+
+    // ---- API calls ----
+    async function loadAccounts() {
+      loadingAccts.value = true;
+      acctError.value = '';
+      try {
+        const r = await fetch('/api/accounts/', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        items.value = (await r.json()).items || [];
+      } catch { acctError.value = 'Failed to load accounts. Try refreshing the page.'; }
+      finally  { loadingAccts.value = false; }
+    }
+
+    async function loadTransactions() {
+      txnError.value = '';
+      try {
+        const r = await fetch('/api/transactions/', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        transactions.value = d.transactions || [];
+        txnTotal.value = d.total || 0;
+      } catch { txnError.value = 'Failed to load transactions.'; }
+    }
+
+    async function loadExpenses() {
+      loadingExp.value = true;
+      try {
+        const r = await fetch('/api/expenses/', { credentials: 'same-origin' });
+        expenses.value = (await r.json()).expenses || [];
+      } finally { loadingExp.value = false; }
+    }
+
+    async function loadIncomeSources() {
+      loadingInc.value = true;
+      try {
+        const r = await fetch('/api/income/', { credentials: 'same-origin' });
+        incomeSources.value = (await r.json()).income_sources || [];
+      } finally { loadingInc.value = false; }
+    }
+
+    function nextIncomeDate(src) {
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      if (src.frequency === 'biweekly' || src.frequency === 'weekly') {
+        if (!src.next_pay_date) return '—';
+        const intervalDays = src.frequency === 'weekly' ? 7 : 14;
+        let next = new Date(src.next_pay_date + 'T12:00:00');
+        while (next.toISOString().split('T')[0] < todayStr)
+          next = new Date(next.getTime() + intervalDays * 86400000);
+        return next.toISOString().split('T')[0];
+      }
+      if (src.frequency === 'semimonthly') {
+        const d = today.getDate();
+        const y = today.getFullYear();
+        const m = today.getMonth();
+        if (d < 15) return `${y}-${String(m + 1).padStart(2, '0')}-15`;
+        const nxt = new Date(y, m + 1, 1);
+        return nxt.toISOString().split('T')[0];
+      }
+      if (src.frequency === 'monthly' && src.day_of_month) {
+        const d = src.day_of_month;
+        const thisMonth = new Date(today.getFullYear(), today.getMonth(), d);
+        if (thisMonth.toISOString().split('T')[0] >= todayStr) return thisMonth.toISOString().split('T')[0];
+        return new Date(today.getFullYear(), today.getMonth() + 1, d).toISOString().split('T')[0];
+      }
+      return src.next_pay_date || '—';
+    }
+
+    function openIncomeForm(src) {
+      if (src) {
+        editIncomeId.value = src.id;
+        Object.assign(incomeForm, {
+          name: src.name, amount: src.amount, frequency: src.frequency,
+          category: src.category, next_pay_date: src.next_pay_date || '',
+          day_of_month: src.day_of_month || '', notes: src.notes || ''
+        });
+      } else {
+        editIncomeId.value = null;
+        Object.assign(incomeForm, { name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '' });
+      }
+      incomeFormErr.value = '';
+      showIncomeModal.value = true;
+    }
+
+    function closeIncomeForm() {
+      showIncomeModal.value = false;
+      editIncomeId.value = null;
+      incomeFormErr.value = '';
+    }
+
+    async function saveIncomeSource() {
+      incomeSaving.value = true; incomeFormErr.value = '';
+      const body = {
+        name: incomeForm.name, amount: incomeForm.amount,
+        frequency: incomeForm.frequency, category: incomeForm.category,
+        next_pay_date: incomeForm.next_pay_date || null,
+        day_of_month: incomeForm.day_of_month || null,
+        notes: incomeForm.notes
+      };
+      try {
+        const url    = editIncomeId.value ? `/api/income/${editIncomeId.value}/` : '/api/income/';
+        const method = editIncomeId.value ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+          method, credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+          body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (d.error) { incomeFormErr.value = d.error; return; }
+        await loadIncomeSources();
+        closeIncomeForm();
+        showToast(editIncomeId.value ? 'Income source updated' : 'Income source added');
+      } catch { incomeFormErr.value = 'Network error. Please try again.'; }
+      finally { incomeSaving.value = false; }
+    }
+
+    async function removeIncome(id) {
+      await fetch(`/api/income/${id}/`, {
+        method: 'DELETE', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': cookie('csrftoken') }
+      });
+      pendingDeleteIncomeId.value = null;
+      await loadIncomeSources();
+      showToast('Income source removed');
+    }
+
+    async function connectAccount() {
+      if (!cfg.plaidConfigured) { alert('Plaid is not configured.'); return; }
+      connecting.value = true;
+      try {
+        const r = await fetch('/plaid/link-token/', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'X-CSRFToken': cookie('csrftoken') }
+        });
+        const d = await r.json();
+        if (d.error) { showToast(d.error, 'err'); connecting.value = false; return; }
+
+        const handler = Plaid.create({
+          token: d.link_token,
+          onSuccess: async (public_token) => {
+            const x = await fetch('/plaid/exchange-token/', {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+              body: JSON.stringify({ public_token })
+            });
+            if (!(await x.json()).error) {
+              await Promise.all([loadAccounts(), loadTransactions()]);
+            }
+            connecting.value = false;
+          },
+          onExit: () => { connecting.value = false; }
+        });
+        handler.open();
+      } catch {
+        showToast('Failed to initiate connection.', 'err');
+        connecting.value = false;
+      }
+    }
+
+    async function refreshItem(id) {
+      refreshing[id] = true;
+      try {
+        await fetch(`/items/${id}/refresh/`, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'X-CSRFToken': cookie('csrftoken') }
+        });
+        await Promise.all([loadAccounts(), loadTransactions()]);
+      } finally { refreshing[id] = false; }
+    }
+
+    function guessCategory(cats) {
+      if (!cats || !cats.length) return 'other';
+      const raw = cats.join(' ').toLowerCase();
+      if (/gas|fuel/.test(raw)) return 'gas';
+      if (/food|grocer|restaurant|dining|coffee|bakery|fast food/.test(raw)) return 'food';
+      if (/transport|uber|lyft|taxi|auto|vehicle|parking|toll/.test(raw)) return 'transport';
+      if (/utilities|electric|water|internet|phone|cable|utility/.test(raw)) return 'utilities';
+      if (/insurance/.test(raw)) return 'insurance';
+      if (/subscription|streaming|netflix|hulu|spotify|amazon prime/.test(raw)) return 'subscriptions';
+      if (/medical|health|pharmacy|doctor|dental|hospital/.test(raw)) return 'medical';
+      if (/loan|mortgage|payment|debt/.test(raw)) return 'debt';
+      if (/rent|housing/.test(raw)) return 'housing';
+      return 'other';
+    }
+
+    // ---- Transaction matching ----
+    function expenseMatches(e) {
+      if (!e.linked_merchant) return [];
+      const terms = e.linked_merchant.split('|').map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (!terms.length) return [];
+      return transactions.value.filter(t => {
+        const name = (t.merchant_name || t.name || '').toLowerCase();
+        return terms.some(m => name.includes(m));
+      });
+    }
+
+    function nextPayment(e) {
+      if (!e.linked_merchant) return null;
+      const matched = expenseMatches(e);
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+
+      if (e.frequency === 'monthly' && e.due_day) {
+        const thisMonthStr = todayStr.slice(0, 7);
+        const dueDay = parseInt(e.due_day);
+        const paidThis = matched.find(t => {
+          if (!t.date.startsWith(thisMonthStr)) return false;
+          return Math.abs(parseInt(t.date.split('-')[2]) - dueDay) <= 5;
+        });
+        if (paidThis) {
+          const next = new Date(today.getFullYear(), today.getMonth() + 1, dueDay);
+          return { status: 'paid', paidDate: paidThis.date, nextDate: next.toISOString().split('T')[0] };
+        }
+        const dueThisMonth = new Date(today.getFullYear(), today.getMonth(), dueDay);
+        const dueStr = dueThisMonth.toISOString().split('T')[0];
+        return dueStr >= todayStr
+          ? { status: 'upcoming', nextDate: dueStr }
+          : { status: 'overdue',  nextDate: dueStr };
+      }
+
+      if (matched.length) {
+        const freqDays = { weekly: 7, biweekly: 14, quarterly: 91, annual: 365, monthly: 30 };
+        const days = freqDays[e.frequency] || 30;
+        const lastDate = [...matched].sort((a, b) => b.date.localeCompare(a.date))[0].date;
+        const next = new Date(new Date(lastDate).getTime() + days * 86400000);
+        const nextStr = next.toISOString().split('T')[0];
+        return { status: nextStr <= todayStr ? 'overdue' : 'upcoming', nextDate: nextStr };
+      }
+      return null;
+    }
+
+    // Builds a month-by-month payment calendar for monthly expenses, or
+    // a list of recent matched transactions for other frequencies.
+    function paymentHistory(e) {
+      const matched = expenseMatches(e);
+      const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+
+      if (e.frequency === 'monthly' && e.due_day) {
+        const dueDay = parseInt(e.due_day);
+        return Array.from({ length: 8 }, (_, i) => {
+          const d = new Date(today.getFullYear(), today.getMonth() - 6 + i, 1);
+          const monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const dueDate = new Date(d.getFullYear(), d.getMonth(), dueDay);
+          const dueDateStr = dueDate.toISOString().split('T')[0];
+          const txn = matched.find(t => t.date.startsWith(monthStr) && Math.abs(parseInt(t.date.split('-')[2]) - dueDay) <= 5)
+                   || matched.find(t => t.date.startsWith(monthStr));
+          const isFuture = dueDateStr > todayStr;
+          const status = txn ? 'paid' : isFuture ? 'upcoming' : 'missing';
+          const actual = txn ? Math.abs(parseFloat(txn.amount)) : null;
+          return {
+            label: d.toLocaleString('default', { month: 'short', year: 'numeric' }),
+            dueDateStr,
+            expected: parseFloat(e.amount),
+            actual,
+            txnDate: txn ? txn.date : null,
+            variance: actual != null ? actual - parseFloat(e.amount) : null,
+            status,
+          };
+        }).reverse();
+      }
+
+      // Non-monthly: recent matched transactions
+      return matched
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 12)
+        .map(t => {
+          const actual = Math.abs(parseFloat(t.amount));
+          return {
+            label: t.date, txnDate: t.date, expected: parseFloat(e.amount),
+            actual, variance: actual - parseFloat(e.amount), status: 'paid',
+          };
+        });
+    }
+
+    function paymentStatusBadge(info) {
+      if (!info) return 'b-gray';
+      return { paid: 'b-green', upcoming: 'b-blue', overdue: 'b-red' }[info.status] || 'b-gray';
+    }
+
+    function paymentStatusLabel(info) {
+      if (!info) return '';
+      if (info.status === 'paid')     return `✓ Paid ${info.paidDate || ''}`.trim();
+      if (info.status === 'upcoming') return `Due ${info.nextDate}`;
+      return 'Overdue';
+    }
+
+    function toggleExpand(id) {
+      expandedExpenseId.value = expandedExpenseId.value === id ? null : id;
+    }
+
+    function openLinkPicker() {
+      linkSearch.value = '';
+      showLinkModal.value = true;
+    }
+
+    function addLinkedMerchantTag() {
+      const val = merchantTagInput.value.trim();
+      if (!val) return;
+      const tags = linkedMerchantTags.value;
+      if (!tags.includes(val)) {
+        form.linked_merchant = [...tags, val].join('|');
+      }
+      merchantTagInput.value = '';
+    }
+
+    function removeLinkedMerchant(tag) {
+      form.linked_merchant = linkedMerchantTags.value.filter(t => t !== tag).join('|');
+    }
+
+    function selectLinkedMerchant(name) {
+      const tags = form.linked_merchant
+        ? form.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : [];
+      if (tags.includes(name)) {
+        // toggle off
+        form.linked_merchant = tags.filter(t => t !== name).join('|');
+      } else {
+        tags.push(name);
+        form.linked_merchant = tags.join('|');
+      }
+      // stay open so user can pick more
+    }
+
+    function openForm(exp) {
+      if (exp) {
+        editId.value = exp.id;
+        Object.assign(form, {
+          name: exp.name, amount: exp.amount, category: exp.category,
+          frequency: exp.frequency, due_day: exp.due_day || '', due_date: exp.due_date || '',
+          notes: exp.notes || '', linked_merchant: exp.linked_merchant || '', _fromTxn: false
+        });
+      } else {
+        editId.value = null;
+        Object.assign(form, { name: '', amount: '', category: 'other', frequency: 'monthly', due_day: '', due_date: '', notes: '', linked_merchant: '', _fromTxn: false });
+      }
+      formErr.value = '';
+      showModal.value = true;
+    }
+
+    function openFormFromTxn(t) {
+      editId.value = null;
+      const amt = Math.abs(parseFloat(t.amount));
+      Object.assign(form, {
+        name: t.merchant_name || t.name,
+        amount: amt.toFixed(2),
+        category: guessCategory(t.category),
+        frequency: 'one_time',
+        due_day: '',
+        due_date: t.date,
+        notes: '',
+        linked_merchant: '',
+        _fromTxn: true
+      });
+      formErr.value = '';
+      showModal.value = true;
+    }
+
+    function openFormFromMerchant(m) {
+      editId.value = null;
+      Object.assign(form, {
+        name: m.name,
+        amount: m.avg.toFixed(2),
+        category: guessCategory(m.category),
+        frequency: m.freq,
+        due_day: '',
+        due_date: '',
+        notes: `${m.count} charge${m.count > 1 ? 's' : ''} imported from transactions`,
+        linked_merchant: m.name,
+        _fromTxn: true
+      });
+      formErr.value = '';
+      showModal.value = true;
+    }
+
+    function closeForm() { showModal.value = false; editId.value = null; formErr.value = ''; form._fromTxn = false; form.linked_merchant = ''; merchantTagInput.value = ''; }
+
+    async function saveExpense() {
+      saving.value = true; formErr.value = '';
+      const wasEdit = !!editId.value;
+      const body = { name: form.name, amount: form.amount, category: form.category,
+                     frequency: form.frequency, due_day: form.due_day || null,
+                     due_date: form.due_date || null, notes: form.notes,
+                     linked_merchant: form.linked_merchant || '' };
+      // _fromTxn is UI-only, not sent to server
+      try {
+        const url    = editId.value ? `/api/expenses/${editId.value}/` : '/api/expenses/';
+        const method = editId.value ? 'PUT' : 'POST';
+        const r = await fetch(url, {
+          method, credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+          body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (!r.ok) { formErr.value = d.error || 'Failed to save.'; return; }
+        await loadExpenses();
+        closeForm();
+        showToast(wasEdit ? 'Expense updated' : 'Expense added');
+      } catch { formErr.value = 'An error occurred. Please try again.'; }
+      finally  { saving.value = false; }
+    }
+
+    async function removeExpense(id) {
+      await fetch(`/api/expenses/${id}/`, {
+        method: 'DELETE', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': cookie('csrftoken') }
+      });
+      pendingDeleteId.value = null;
+      await loadExpenses();
+      showToast('Expense deleted');
+    }
+
+    // ---- Charts ----
+    const CAT_COLORS = {
+      housing: '#6366f1', utilities: '#f59e0b', food: '#10b981',
+      transport: '#3b82f6', gas: '#f97316', insurance: '#8b5cf6',
+      subscriptions: '#ec4899', debt: '#ef4444', medical: '#14b8a6', other: '#9ca3af'
+    };
+
+    function drawCharts() {
+      nextTick(() => {
+        // ── Donut: spending by category ──────────────────────────
+        const donutEl = document.getElementById('donutChart');
+        if (donutEl) {
+          const prev = Chart.getChart(donutEl);
+          if (prev) prev.destroy();
+          if (catBreakdown.value.length) {
+            new Chart(donutEl, {
+              type: 'doughnut',
+              data: {
+                labels: catBreakdown.value.map(c => c.label),
+                datasets: [{
+                  data: catBreakdown.value.map(c => c.monthly),
+                  backgroundColor: catBreakdown.value.map(c => CAT_COLORS[c.category] || '#9ca3af'),
+                  borderWidth: 2,
+                  borderColor: '#fff',
+                  hoverOffset: 6,
+                }]
+              },
+              options: {
+                cutout: '62%',
+                plugins: {
+                  legend: { position: 'right', labels: { boxWidth: 12, padding: 10, font: { family: 'Inter', size: 12 } } },
+                  tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.parsed) + ' / mo' } }
+                }
+              }
+            });
+          }
+        }
+
+        // ── Bar: 6-month cash flow ────────────────────────────────
+        const cashflowEl = document.getElementById('cashflowChart');
+        if (cashflowEl) {
+          const prev = Chart.getChart(cashflowEl);
+          if (prev) prev.destroy();
+          const now = new Date();
+          const labels = [], months = [];
+          for (let i = 0; i < 6; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            labels.push(d.toLocaleString('default', { month: 'short', year: '2-digit' }));
+            months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }
+          const mi = monthlyIncome.value;
+          const expData = months.map(m => {
+            let total = totalMonthly.value;
+            for (const e of onetime.value)
+              if (e.due_date && e.due_date.startsWith(m)) total += parseFloat(e.amount);
+            return parseFloat(total.toFixed(2));
+          });
+          new Chart(cashflowEl, {
+            type: 'bar',
+            data: {
+              labels,
+              datasets: [
+                { label: 'Income',   data: months.map(() => mi),  backgroundColor: 'rgba(34,197,94,.7)',  borderRadius: 4 },
+                { label: 'Expenses', data: expData, backgroundColor: expData.map(v => v > (mi || Infinity) ? 'rgba(239,68,68,.75)' : 'rgba(239,68,68,.55)'), borderRadius: 4 }
+              ]
+            },
+            options: {
+              responsive: true,
+              plugins: {
+                legend: { labels: { boxWidth: 12, font: { family: 'Inter', size: 12 } } },
+                tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.parsed.y) } }
+              },
+              scales: {
+                y: {
+                  ticks: { callback: v => '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v), font: { family: 'Inter', size: 11 } },
+                  grid: { color: '#f3f4f6' }, beginAtZero: true
+                },
+                x: { ticks: { font: { family: 'Inter', size: 11 } }, grid: { display: false } }
+              }
+            }
+          });
+        }
+      });
+    }
+
+    watch(tab, newTab => { if (newTab === 'forecast') drawCharts(); });
+    watch([catBreakdown, monthlyIncome, onetime], () => { if (tab.value === 'forecast') drawCharts(); });
+
+    onMounted(() => {
+      Promise.all([loadAccounts(), loadTransactions(), loadExpenses(), loadIncomeSources()]);
+      document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          if (showLinkModal.value) showLinkModal.value = false;
+          else if (showIncomeModal.value) closeIncomeForm();
+          else if (showModal.value) closeForm();
+        }
+      });
+    });
+
+    return {
+      tab, expTab, username, logoutUrl,
+      items, transactions, loadingAccts, connecting, refreshing,
+      expenses, loadingExp, showModal, editId, formErr, saving, form,
+      incomeSources, loadingInc, showIncomeModal, editIncomeId, incomeFormErr, incomeSaving, incomeForm, pendingDeleteIncomeId,
+      monthlyIncome,
+      totalAccounts, netWorth, visibleExpenses, totalMonthly, net, catBreakdown, upcoming,
+      expSummaryPeriod, expSummaryBounds, expSummaryRows, expSummaryTotals,
+      filteredTxnsForPicker, filteredMerchants, linkMerchants,
+      txnSearch, txnView, txnTotal,
+      toasts, pendingDeleteId, expandedExpenseId, showLinkModal, linkSearch, merchantTagInput, linkedMerchantTags, acctError, txnError,
+      fmt, ago, cap, statusBadge, isLiability,
+      showToast, dismissToast,
+      expenseMatches, nextPayment, paymentHistory, paymentStatusBadge, paymentStatusLabel, toggleExpand, openLinkPicker, selectLinkedMerchant, addLinkedMerchantTag, removeLinkedMerchant,
+      connectAccount, refreshItem, openForm, openFormFromTxn, openFormFromMerchant, closeForm, saveExpense, removeExpense,
+      openIncomeForm, closeIncomeForm, saveIncomeSource, removeIncome, nextIncomeDate,
+      parseFloat, Math
+    };
+  }
+});
+
+app.config.compilerOptions.delimiters = ['[[', ']]'];
+app.mount('#app');
+</script>
+</body>
+</html>

@@ -5,7 +5,8 @@ description = "Django 6 starter project for Podman Compose"
 readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
-  "Django>=6.0,<7.0",
+  "Django==6.0.5",
+  "plaid-python>=39.2.0",
   "psycopg[binary]>=3.2,<4",
 ]
 

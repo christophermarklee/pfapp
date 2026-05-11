@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -18,6 +19,17 @@ def env_list(name: str, default: str = "") -> list[str]:
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-change-me")
 DEBUG = env_bool("DEBUG", "1")
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0")
+PLAID_CLIENT_ID = os.environ.get("PLAID_CLIENT_ID", "")
+PLAID_SECRET = os.environ.get("PLAID_SECRET", "")
+PLAID_ENV = os.environ.get("PLAID_ENV", "sandbox")
+PLAID_PRODUCTS = env_list("PLAID_PRODUCTS", "transactions,liabilities")
+PLAID_COUNTRY_CODES = env_list("PLAID_COUNTRY_CODES", "US")
+PLAID_REDIRECT_URI = os.environ.get("PLAID_REDIRECT_URI", "")
+PLAID_WEBHOOK_URL = os.environ.get("PLAID_WEBHOOK_URL", "")
+PLAID_CLIENT_NAME = os.environ.get("PLAID_CLIENT_NAME", "pfapp")
+PLAID_SYNC_ENABLED = env_bool("PLAID_SYNC_ENABLED", "1")
+
+RUNNING_TESTS = any(argument == "test" or argument.startswith("test") for argument in sys.argv[1:])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -60,14 +72,21 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DATABASE_NAME", "pfapp"),
-        "USER": os.environ.get("DATABASE_USER", "pfapp"),
-        "PASSWORD": os.environ.get("DATABASE_PASSWORD", "pfapp"),
-        "HOST": os.environ.get("DATABASE_HOST", "db"),
-        "PORT": os.environ.get("DATABASE_PORT", "5432"),
-    }
+    "default": (
+        {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "test.sqlite3",
+        }
+        if RUNNING_TESTS
+        else {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("DATABASE_NAME", "pfapp"),
+            "USER": os.environ.get("DATABASE_USER", "pfapp"),
+            "PASSWORD": os.environ.get("DATABASE_PASSWORD", "pfapp"),
+            "HOST": os.environ.get("DATABASE_HOST", "db"),
+            "PORT": os.environ.get("DATABASE_PORT", "5432"),
+        }
+    )
 }
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -85,3 +104,6 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGIN_REDIRECT_URL = "/"
+LOGIN_URL = "/accounts/login/"
