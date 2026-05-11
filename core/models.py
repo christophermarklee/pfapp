@@ -169,16 +169,23 @@ class ExpenseFrequency(models.TextChoices):
 
 
 class ExpenseCategory(models.TextChoices):
-    HOUSING = "housing", "Housing"
-    UTILITIES = "utilities", "Utilities"
-    FOOD = "food", "Food & Groceries"
-    TRANSPORT = "transport", "Transportation"
-    GAS = "gas", "Gas"
-    INSURANCE = "insurance", "Insurance"
-    SUBSCRIPTIONS = "subscriptions", "Subscriptions"
-    DEBT = "debt", "Debt Payments"
-    MEDICAL = "medical", "Medical"
-    OTHER = "other", "Other"
+    HOUSING       = "housing",       "Housing"               # rent, mortgage, HOA, home repairs
+    UTILITIES     = "utilities",     "Utilities"             # electric, gas/heat, water, internet, phone
+    GROCERIES     = "groceries",     "Groceries"             # supermarkets, grocery delivery
+    DINING        = "dining",        "Dining & Bars"         # restaurants, takeout, coffee shops, bars
+    TRANSPORT     = "transport",     "Transportation"        # car, fuel, transit, rideshare, parking
+    HEALTH        = "health",        "Health & Fitness"      # medical, dental, pharmacy, gym
+    INSURANCE     = "insurance",     "Insurance"             # auto, life, home, renters, disability
+    SHOPPING      = "shopping",      "Shopping"              # clothing, electronics, general retail
+    ENTERTAINMENT = "entertainment", "Entertainment"         # streaming, events, hobbies, travel
+    SUBSCRIPTIONS = "subscriptions", "Subscriptions"         # SaaS, apps, recurring memberships
+    EDUCATION     = "education",     "Education & Childcare" # tuition, books, courses, daycare
+    PERSONAL      = "personal",      "Personal Care"         # haircuts, beauty, hygiene, self-care
+    PETS          = "pets",          "Pets"                  # vet, food, grooming, supplies
+    DEBT          = "debt",          "Debt Payments"         # loan payments (not mortgage)
+    SAVINGS       = "savings",       "Savings & Investment"  # transfers to savings/brokerage
+    TAXES         = "taxes",         "Taxes & Fees"          # tax payments, government fees, fines
+    OTHER         = "other",         "Other"                 # catch-all
 
 
 class Expense(models.Model):
