@@ -28,6 +28,8 @@ PLAID_REDIRECT_URI = os.environ.get("PLAID_REDIRECT_URI", "")
 PLAID_WEBHOOK_URL = os.environ.get("PLAID_WEBHOOK_URL", "")
 PLAID_CLIENT_NAME = os.environ.get("PLAID_CLIENT_NAME", "pfapp")
 PLAID_SYNC_ENABLED = env_bool("PLAID_SYNC_ENABLED", "1")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.5-nano")
 
 RUNNING_TESTS = any(argument == "test" or argument.startswith("test") for argument in sys.argv[1:])
 

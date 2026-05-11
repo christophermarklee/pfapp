@@ -21,6 +21,7 @@ from .models import (
     IncomeSource,
     SyncTrigger,
     Transaction,
+    TransferMerchant,
 )
 from .services import PlaidConfigurationError, create_link_token, exchange_public_token, sync_item
 
@@ -28,9 +29,13 @@ from .services import PlaidConfigurationError, create_link_token, exchange_publi
 @login_required
 @ensure_csrf_cookie
 def home(request: HttpRequest) -> HttpResponse:
-    return render(request, "core/home.html", {
+    response = render(request, "core/home.html", {
         "plaid_configured": bool(settings.PLAID_CLIENT_ID and settings.PLAID_SECRET),
     })
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +367,7 @@ def _income_to_dict(source: IncomeSource) -> dict:
         "next_pay_date": npd.isoformat() if hasattr(npd, "isoformat") else (npd or None),
         "day_of_month": source.day_of_month,
         "notes": source.notes,
+        "linked_merchant": source.linked_merchant,
         "monthly_amount": str(source.monthly_amount),
         "annual_amount": str(source.annual_amount),
     }
@@ -393,3 +399,100 @@ def _apply_income(source: IncomeSource, payload: dict) -> None:
     source.next_pay_date = payload.get("next_pay_date") or None
     source.day_of_month = _int_or_none(payload.get("day_of_month"))
     source.notes = str(payload.get("notes", ""))
+    source.linked_merchant = (payload.get("linked_merchant") or "").strip()
+
+
+@login_required
+def api_transfers(request: HttpRequest) -> JsonResponse:
+    if request.method == "GET":
+        transfers = list(TransferMerchant.objects.values("id", "merchant_key"))
+        return JsonResponse({"transfers": transfers})
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        key = (data.get("merchant_key") or "").strip()
+        if not key:
+            return JsonResponse({"error": "merchant_key required"}, status=400)
+        obj, _ = TransferMerchant.objects.get_or_create(merchant_key=key)
+        return JsonResponse({"id": obj.id, "merchant_key": obj.merchant_key})
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+@login_required
+def api_transfer_detail(request: HttpRequest, transfer_id: int) -> JsonResponse:
+    obj = get_object_or_404(TransferMerchant, id=transfer_id)
+    if request.method == "DELETE":
+        obj.delete()
+        return JsonResponse({"ok": True})
+    return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+@login_required
+def api_ai_suggest(request: HttpRequest) -> JsonResponse:
+    from .ai import build_merchant_summary, build_expense_context, call_suggest, _safe_merchant_name
+    from .models import AISuggestionCache
+
+    # GET — return cached suggestions (no OpenAI call)
+    if request.method == "GET":
+        cache = AISuggestionCache.objects.filter(user=request.user).first()
+        if cache:
+            return JsonResponse({
+                "suggestions": cache.suggestions,
+                "generated_at": cache.generated_at.isoformat(),
+                "cached": True,
+            })
+        return JsonResponse({"suggestions": [], "cached": False})
+
+    # POST — call OpenAI, save result to cache
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    transactions = list(Transaction.objects.filter(user=request.user).order_by("-date"))
+    expenses = list(Expense.objects.filter(user=request.user, is_active=True))
+
+    merchant_summary = build_merchant_summary(transactions)
+    expense_context = build_expense_context(expenses)
+
+    try:
+        suggestions = call_suggest(merchant_summary, expense_context, settings.OPENAI_MODEL)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({"error": f"AI request failed: {exc}"}, status=500)
+
+    # Build a lookup: safe merchant name -> list of transactions (capped per merchant)
+    txn_by_merchant: dict[str, list] = {}
+    for t in transactions:
+        name = _safe_merchant_name(t)
+        if not name:
+            continue
+        txn_by_merchant.setdefault(name, [])
+        if len(txn_by_merchant[name]) < 5:
+            txn_by_merchant[name].append({
+                "id": t.id,
+                "merchant_name": name,
+                "date": str(t.date),
+                "amount": float(abs(t.amount)),
+            })
+
+    # Attach matching transactions to each suggestion
+    for s in suggestions:
+        txns = []
+        seen_ids: set[int] = set()
+        for merchant in s.get("linked_merchants", []):
+            for txn in txn_by_merchant.get(merchant, []):
+                if txn["id"] not in seen_ids:
+                    txns.append(txn)
+                    seen_ids.add(txn["id"])
+        txns.sort(key=lambda x: x["date"], reverse=True)
+        s["transactions"] = txns[:10]
+
+    # Save to cache (upsert)
+    AISuggestionCache.objects.update_or_create(
+        user=request.user,
+        defaults={"suggestions": suggestions},
+    )
+
+    return JsonResponse({"suggestions": suggestions, "cached": False})

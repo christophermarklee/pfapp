@@ -82,6 +82,8 @@
     }
     .btn-primary { background: var(--primary); color: white; border-color: var(--primary); }
     .btn-primary:hover:not(:disabled) { background: var(--primary-h); border-color: var(--primary-h); }
+    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg); }
     .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
     .btn-ghost:hover:not(:disabled) { background: var(--bg); color: var(--text); }
     .btn-del { background: transparent; color: var(--danger); border: none; }
@@ -211,6 +213,9 @@
     .ph-upcoming { color: var(--primary); }
     .ph-missing  { color: var(--warning); font-weight: 600; }
 
+    /* ---- Spinner ---- */
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
     /* ---- Forecast bars ---- */
     .bar-row { display: flex; align-items: center; gap: 10px; }
     .bar-track { flex: 1; height: 7px; background: #e5e7eb; border-radius: 4px; overflow: hidden; }
@@ -298,6 +303,10 @@
     <div class="nav-tab" :class="{ active: tab === 'expenses' }" @click="tab = 'expenses'">Expenses</div>
     <div class="nav-tab" :class="{ active: tab === 'income' }" @click="tab = 'income'">Income</div>
     <div class="nav-tab" :class="{ active: tab === 'forecast' }" @click="tab = 'forecast'">Forecast</div>
+    <div class="nav-tab" :class="{ active: tab === 'categorize' }" @click="tab = 'categorize'" style="position:relative">
+      Categorize
+      <span v-if="unmatchedCount > 0" class="badge b-red" style="margin-left:5px;font-size:10px;padding:1px 5px">[[ unmatchedCount ]]</span>
+    </div>
   </nav>
 
   <main class="app-body">
@@ -414,14 +423,16 @@
       <div class="sec-hdr">
         <div class="sub-tabs">
           <div class="sub-tab" :class="{ active: expTab === 'recurring' }" @click="expTab = 'recurring'">Recurring</div>
+          <div class="sub-tab" :class="{ active: expTab === 'variable'  }" @click="expTab = 'variable'">Variable</div>
           <div class="sub-tab" :class="{ active: expTab === 'onetime'   }" @click="expTab = 'onetime'">One-time</div>
           <div class="sub-tab" :class="{ active: expTab === 'summary'   }" @click="expTab = 'summary'">Summary</div>
+          <div class="sub-tab" :class="{ active: expTab === 'ai'        }" @click="expTab = 'ai'">✦ AI Suggestions</div>
           <div class="sub-tab" :class="{ active: expTab === 'from-txn'  }" @click="expTab = 'from-txn'">From Transaction</div>
         </div>
-        <button class="btn btn-primary" v-if="expTab !== 'from-txn' && expTab !== 'summary'" @click="openForm(null)">+ Add Expense</button>
+        <button class="btn btn-primary" v-if="expTab !== 'from-txn' && expTab !== 'summary' && expTab !== 'ai'" @click="openForm(null)">+ Add Expense</button>
       </div>
 
-      <div v-if="expTab === 'recurring'" class="stats-grid">
+      <div v-if="expTab === 'recurring' || expTab === 'variable'" class="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Monthly Total</div>
           <div class="stat-value neg">[[ fmt(totalMonthly) ]]</div>
@@ -432,22 +443,23 @@
         </div>
       </div>
 
-      <div v-if="loadingExp && expTab !== 'from-txn' && expTab !== 'summary'" class="loading">Loading expenses…</div>
+      <div v-if="loadingExp && expTab !== 'from-txn' && expTab !== 'summary' && expTab !== 'ai'" class="loading">Loading expenses…</div>
 
-      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary' && !visibleExpenses.length" class="card">
+      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary' && expTab !== 'ai' && !visibleExpenses.length" class="card">
         <div class="empty">
-          <p>No [[ expTab === 'recurring' ? 'recurring' : 'one-time' ]] expenses yet.</p>
+          <p>No [[ expTab === 'recurring' ? 'recurring' : expTab === 'variable' ? 'variable' : 'one-time' ]] expenses yet.</p>
         </div>
       </div>
 
-      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary'" class="card">
+      <div v-else-if="expTab !== 'from-txn' && expTab !== 'summary' && expTab !== 'ai'" class="card">
         <div class="tbl-wrap">
           <table>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Category</th>
-                <th style="text-align:right">Per Payment</th>
+                <th style="text-align:right" v-if="expTab !== 'variable'">Per Payment</th>
+                <th style="text-align:right" v-if="expTab === 'variable'">Monthly Budget Cap</th>
                 <th v-if="expTab === 'recurring'">Frequency</th>
                 <th v-if="expTab === 'recurring'" style="text-align:right">Monthly Budget</th>
                 <th v-if="expTab === 'onetime'">Due Date</th>
@@ -471,6 +483,7 @@
                   <td v-if="expTab === 'recurring'">[[ e.frequency_display ]]</td>
                   <td v-if="expTab === 'recurring'" style="text-align:right;color:var(--text-muted)">[[ fmt(parseFloat(e.monthly_amount)) ]]</td>
                   <td v-if="expTab === 'onetime'">[[ e.due_date || '—' ]]</td>
+                  <!-- variable tab has no extra date/frequency columns -->
                   <td>
                     <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap">
                       <template v-if="e.linked_merchant">
@@ -602,7 +615,7 @@
                 <tr>
                   <th>Expense</th>
                   <th>Category</th>
-                  <th style="text-align:right">Budget</th>
+                  <th style="text-align:right">Budget<span v-if="expSummaryPeriod==='month'" style="font-weight:400;color:var(--text-muted);font-size:11px"> · prorated</span></th>
                   <th style="text-align:right">Actual</th>
                   <th style="text-align:right">Variance</th>
                   <th style="min-width:140px">vs Budget</th>
@@ -615,7 +628,10 @@
                     <span v-if="!row.linked_merchant" style="font-size:11px;color:var(--text-muted);margin-left:4px">· not linked</span>
                   </td>
                   <td><span class="badge b-gray">[[ row.category_display ]]</span></td>
-                  <td style="text-align:right;color:var(--text-muted)">[[ fmt(row.budget) ]]</td>
+                  <td style="text-align:right;color:var(--text-muted)">
+                    [[ fmt(row.budget) ]]
+                    <span v-if="row.frequency === 'variable'" style="font-size:10px;color:var(--text-muted);margin-left:2px">cap</span>
+                  </td>
                   <td style="text-align:right;font-weight:500">
                     <span v-if="row.linked_merchant">[[ fmt(row.actual) ]]</span>
                     <span v-else style="color:var(--text-muted)">—</span>
@@ -637,11 +653,109 @@
                       </div>
                       <span style="font-size:11px;color:var(--text-muted);min-width:30px">[[ Math.round(row.pct) ]]%</span>
                     </div>
-                    <button v-else class="btn btn-sm btn-ghost" style="font-size:11px" @click="expTab='recurring';openForm(expenses.find(e=>e.id===row.id))">Link</button>
+                    <button v-else class="btn btn-sm btn-ghost" style="font-size:11px" @click="expTab=row.frequency==='variable'?'variable':'recurring';openForm(expenses.find(e=>e.id===row.id))">Link</button>
                   </td>
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Suggestions tab -->
+      <div v-if="expTab === 'ai'">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <button class="btn btn-primary" @click="loadAISuggestions" :disabled="loadingAI || loadingAICache"
+                  style="display:flex;align-items:center;gap:8px">
+            <svg v-if="loadingAI" style="width:16px;height:16px;animation:spin 1s linear infinite" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            <span v-if="loadingAI">Analyzing transactions…</span>
+            <span v-else-if="aiSuggestions.length">↻ Refresh Suggestions</span>
+            <span v-else>✦ Get AI Suggestions</span>
+          </button>
+          <span v-if="loadingAICache" style="font-size:13px;color:var(--text-muted)">Loading saved suggestions…</span>
+          <span v-else-if="aiSuggestions.length && !loadingAI" style="font-size:13px;color:var(--text-muted)">
+            [[ visibleAISuggestions.length ]] suggestion[[ visibleAISuggestions.length !== 1 ? 's' : '' ]]
+            <span v-if="aiCachedAt"> · saved [[ new Date(aiCachedAt).toLocaleDateString() ]]</span>
+          </span>
+        </div>
+
+        <div v-if="aiError" class="card" style="border-left:4px solid var(--danger);padding:16px">
+          <p style="color:var(--danger);font-weight:600;margin:0 0 4px">AI Error</p>
+          <p style="color:var(--text-muted);font-size:14px;margin:0">[[ aiError ]]</p>
+        </div>
+
+        <div v-else-if="!aiSuggestions.length && !loadingAI" class="card">
+          <div class="empty">
+            <p style="font-size:22px;margin-bottom:8px">✦</p>
+            <p>Click <strong>Get AI Suggestions</strong> to have AI analyze your transaction history and suggest expense groups.</p>
+            <p style="font-size:13px;color:var(--text-muted)">Works best when you have imported transactions. The AI will group merchants and recommend budget amounts.</p>
+          </div>
+        </div>
+
+        <div v-else-if="visibleAISuggestions.length === 0 && aiSuggestions.length" class="card">
+          <div class="empty">
+            <p>All suggestions dismissed. Click <strong>Get AI Suggestions</strong> again to refresh.</p>
+          </div>
+        </div>
+
+        <div v-else style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+          <div v-for="s in visibleAISuggestions" :key="s.name"
+               class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <!-- Header -->
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+              <span style="font-weight:600;font-size:15px">[[ s.name ]]</span>
+              <div style="display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end">
+                <span v-if="aiSuggestionMatchesExpense(s)" class="badge b-green" style="white-space:nowrap">Exists</span>
+                <span class="badge" :class="s.is_new ? 'b-blue' : 'b-yellow'" style="white-space:nowrap">
+                  [[ s.is_new ? 'New' : 'Refinement' ]]
+                </span>
+              </div>
+            </div>
+            <!-- Meta row -->
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <span class="badge b-gray">[[ s.category ]]</span>
+              <span class="badge b-gray">[[ s.frequency.replace('_',' ') ]]</span>
+              <span style="font-weight:600;color:var(--text)">[[ fmt(s.suggested_amount) ]] / payment</span>
+            </div>
+            <!-- Linked merchants -->
+            <div v-if="s.linked_merchants.length" style="display:flex;flex-wrap:wrap;gap:4px">
+              <span v-for="m in s.linked_merchants" :key="m"
+                    style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:2px 8px;font-size:12px">
+                🔗 [[ m ]]
+              </span>
+            </div>
+            <!-- Reason -->
+            <p style="font-size:13px;color:var(--text-muted);margin:0;line-height:1.4">[[ s.reason ]]</p>
+            <!-- Transaction toggle -->
+            <div v-if="s.transactions && s.transactions.length">
+              <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px"
+                      @click="toggleAITxnList(s.name)">
+                [[ expandedAISuggestions[s.name] ? '▲ Hide' : '▼ Show' ]] [[ s.transactions.length ]] transaction[[ s.transactions.length !== 1 ? 's' : '' ]]
+              </button>
+              <div v-if="expandedAISuggestions[s.name]"
+                   style="margin-top:8px;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:12px">
+                <div v-for="t in s.transactions" :key="t.id"
+                     style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;border-bottom:1px solid var(--border);gap:8px">
+                  <span style="color:var(--text-muted);white-space:nowrap">[[ t.date ]]</span>
+                  <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">[[ t.merchant_name ]]</span>
+                  <span style="font-weight:600;white-space:nowrap">[[ fmt(t.amount) ]]</span>
+                </div>
+              </div>
+            </div>
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;margin-top:auto;padding-top:4px;flex-wrap:wrap">
+              <template v-if="aiSuggestionMatchesExpense(s)">
+                <button class="btn btn-primary btn-sm" style="flex:1" @click="acceptAISuggestion(s)">✎ Update Existing</button>
+              </template>
+              <template v-else-if="s.transactions && s.transactions.length === 1">
+                <button class="btn btn-primary btn-sm" style="flex:1" @click="acceptAISuggestion(s)">↻ Add as Recurring</button>
+                <button class="btn btn-secondary btn-sm" style="flex:1" @click="acceptAISuggestion(s, true)">+ Add as One-time</button>
+              </template>
+              <template v-else>
+                <button class="btn btn-primary btn-sm" style="flex:1" @click="acceptAISuggestion(s)">+ Add as Expense</button>
+              </template>
+              <button class="btn btn-ghost btn-sm" @click="dismissAISuggestion(s.name)">Dismiss</button>
+            </div>
           </div>
         </div>
       </div>
@@ -716,10 +830,19 @@
       </div>
 
       <div v-else class="card" style="margin-bottom:14px">
+        <!-- Issues banner -->
+        <div v-if="Object.keys(incomeWarnings).length" style="padding:10px 14px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#92400e">
+          <span style="flex-shrink:0;margin-top:1px">⚠</span>
+          <div>
+            <strong>[[ Object.keys(incomeWarnings).length ]] source[[ Object.keys(incomeWarnings).length > 1 ? 's have' : ' has' ]] issues</strong> —
+            duplicates, missing payer tags, or past one-time entries. Rows marked with ⚠ need attention. Use <em>Edit</em> to fix or <em>Delete</em> to remove.
+          </div>
+        </div>
         <div class="tbl-wrap">
           <table>
             <thead>
               <tr>
+                <th></th>
                 <th>Name</th>
                 <th>Category</th>
                 <th>Frequency</th>
@@ -733,13 +856,32 @@
             <tbody>
               <template v-for="src in incomeSources" :key="src.id">
                 <tr>
-                  <td style="font-weight:500">[[ src.name ]]</td>
+                  <td style="width:28px;padding-right:0">
+                    <button v-if="src.linked_merchant" class="btn btn-sm btn-ghost"
+                            style="padding:2px 5px;font-size:11px"
+                            :title="expandedIncomeId === src.id ? 'Hide transactions' : 'Show linked transactions'"
+                            @click="expandedIncomeId = expandedIncomeId === src.id ? null : src.id">
+                      [[ expandedIncomeId === src.id ? '▲' : '▼' ]]
+                    </button>
+                  </td>
+                  <td style="font-weight:500">
+                    [[ src.name ]]
+                    <span v-if="incomeWarnings[src.id]"
+                          :title="incomeWarnings[src.id].join('\n')"
+                          style="cursor:help;color:#d97706;font-size:12px;margin-left:4px">⚠</span>
+                  </td>
                   <td><span class="badge b-green">[[ src.category_display ]]</span></td>
                   <td style="font-size:13px">[[ src.frequency_display ]]</td>
-                  <td style="text-align:right">[[ fmt(parseFloat(src.amount)) ]]</td>
+                  <td style="text-align:right">
+                    <span v-if="src.frequency !== 'variable'">[[ fmt(parseFloat(src.amount)) ]]</span>
+                    <span v-else style="color:var(--text-muted);font-size:12px">—</span>
+                  </td>
                   <td style="text-align:right;color:var(--success);font-weight:500">[[ fmt(parseFloat(src.monthly_amount)) ]]</td>
                   <td style="text-align:right;color:var(--text-muted)">[[ fmt(parseFloat(src.annual_amount)) ]]</td>
-                  <td style="font-size:12px;color:var(--text-muted)">[[ nextIncomeDate(src) ]]</td>
+                  <td style="font-size:12px;color:var(--text-muted)">
+                    <span v-if="src.frequency !== 'variable'">[[ nextIncomeDate(src) ]]</span>
+                    <span v-else class="badge" style="background:#f3f4f6;color:#6b7280">Variable</span>
+                  </td>
                   <td>
                     <div style="display:flex;gap:6px;justify-content:flex-end">
                       <button class="btn btn-sm btn-ghost" @click="openIncomeForm(src)">Edit</button>
@@ -751,19 +893,65 @@
                     </div>
                   </td>
                 </tr>
+                <!-- Linked transactions sub-row -->
+                <tr v-if="expandedIncomeId === src.id">
+                  <td colspan="9" style="padding:0;background:var(--bg-subtle, #f9fafb)">
+                    <div style="padding:10px 16px 14px 44px">
+                      <div v-if="incomeTransactions(src).length === 0" style="font-size:12px;color:var(--text-muted);padding:4px 0">
+                        No matching transactions found. Make sure the Payer tag in the income source matches the transaction merchant name.
+                      </div>
+                      <table v-else style="width:100%;font-size:12px;border-collapse:collapse">
+                        <thead>
+                          <tr style="color:var(--text-muted)">
+                            <th style="text-align:left;padding:3px 8px 3px 0;font-weight:500">Date</th>
+                            <th style="text-align:left;padding:3px 8px;font-weight:500">Merchant</th>
+                            <th style="text-align:left;padding:3px 8px;font-weight:500">Account</th>
+                            <th style="text-align:right;padding:3px 0 3px 8px;font-weight:500">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="t in incomeTransactions(src)" :key="t.id" style="border-top:1px solid var(--border-light, #f0f0f0)">
+                            <td style="padding:4px 8px 4px 0;color:var(--text-muted)">[[ t.date ]]</td>
+                            <td style="padding:4px 8px">[[ t.merchant_name || t.name ]]</td>
+                            <td style="padding:4px 8px;color:var(--text-muted)">[[ t.account || '' ]]</td>
+                            <td style="padding:4px 0 4px 8px;text-align:right;font-weight:500;color:var(--success)">[[ fmt(Math.abs(parseFloat(t.amount))) ]]</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
               </template>
             </tbody>
+            <tfoot>
+              <tr style="border-top:2px solid var(--border);font-weight:600;font-size:13px">
+                <td></td>
+                <td colspan="3" style="color:var(--text-muted)">Total</td>
+                <td></td>
+                <td style="text-align:right;color:var(--success)">[[ fmt(monthlyIncome) ]]</td>
+                <td style="text-align:right;color:var(--text-muted)">[[ fmt(monthlyIncome * 12) ]]</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
 
       <div v-if="incomeSources.length" class="stats-grid">
         <div class="stat-card">
-          <div class="stat-label">Monthly Income</div>
+          <div class="stat-label">Regular (Monthly)</div>
+          <div class="stat-value pos">[[ fmt(monthlyRegularIncome) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Variable (Monthly est.)</div>
+          <div class="stat-value pos">[[ fmt(monthlyVariableIncome) ]]</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Monthly</div>
           <div class="stat-value pos">[[ fmt(monthlyIncome) ]]</div>
         </div>
         <div class="stat-card">
-          <div class="stat-label">Annual Income</div>
+          <div class="stat-label">Total Annual</div>
           <div class="stat-value pos">[[ fmt(monthlyIncome * 12) ]]</div>
         </div>
       </div>
@@ -871,6 +1059,138 @@
       </div>
     </div>
 
+    <!-- ================================================================
+         CATEGORIZE TAB
+         ================================================================ -->
+    <div v-if="tab === 'categorize'">
+      <!-- Filter bar -->
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <input type="search" v-model="catSearch" placeholder="Search merchants…" style="width:220px;margin-bottom:0;flex-shrink:0">
+        <div class="txn-view-toggle">
+          <button class="tvt-btn" :class="{active: catFilter==='unmatched'}" @click="catFilter='unmatched'">
+            Unmatched <span class="badge b-gray" style="margin-left:4px;font-size:10px">[[ unmatchedCount ]]</span>
+          </button>
+          <button class="tvt-btn" :class="{active: catFilter==='expenses'}" @click="catFilter='expenses'">Expenses</button>
+          <button class="tvt-btn" :class="{active: catFilter==='income'}" @click="catFilter='income'">Income</button>
+          <button class="tvt-btn" :class="{active: catFilter==='transfers'}" @click="catFilter='transfers'">
+            Transfers <span class="badge b-gray" style="margin-left:4px;font-size:10px">[[ transferCount ]]</span>
+          </button>
+          <button class="tvt-btn" :class="{active: catFilter==='all'}" @click="catFilter='all'">All</button>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);margin-left:4px">
+          [[ categorizeGroups.length ]] merchant[[ categorizeGroups.length !== 1 ? 's' : '' ]]
+        </span>
+      </div>
+
+      <div v-if="!transactions.length" class="card">
+        <div class="empty"><p>No transactions imported yet. Connect an account first.</p></div>
+      </div>
+
+      <div v-else-if="!categorizeGroups.length" class="card">
+        <div class="empty">
+          <p style="font-size:26px;margin-bottom:8px">&#127881;</p>
+          <p v-if="catFilter==='unmatched'">All merchants are linked!</p>
+          <p v-else-if="catFilter==='transfers'">No transfers marked yet.</p>
+          <p v-else>No merchants match your search.</p>
+        </div>
+      </div>
+
+      <div v-else class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Merchant / Payer</th>
+                <th style="text-align:right">Txns</th>
+                <th style="text-align:right">Total</th>
+                <th>Est. Frequency</th>
+                <th>Linked To</th>
+                <th style="min-width:280px">Assign to</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="m in categorizeGroups" :key="m.key">
+                <td>
+                  <div style="font-weight:500;font-size:13px">
+                    [[ m.name ]]
+                    <span v-if="m.isCredit" class="badge b-green" style="margin-left:4px;font-size:10px">Credit</span>
+                  </div>
+                  <div style="font-size:11px;color:var(--text-muted)">last [[ m.lastDate ]]</div>
+                </td>
+                <td style="text-align:right;color:var(--text-muted)">[[ m.count ]]</td>
+                <td style="text-align:right;font-weight:500">[[ fmt(m.total) ]]</td>
+                <td><span class="badge b-gray">[[ m.freqLabel ]]</span></td>
+                <td>
+                  <template v-if="merchantMatchedTransfer(m.key)">
+                    <div style="display:flex;align-items:center;gap:4px">
+                      <span class="badge b-yellow" style="white-space:normal;text-align:left;display:inline-block">&#8646; Transfer</span>
+                      <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--red)"
+                              @click="unmarkTransfer(m.key)" title="Remove transfer mark">✕</button>
+                    </div>
+                  </template>
+                  <template v-else-if="merchantMatchedExpense(m.key)">
+                    <div style="display:flex;align-items:center;gap:4px">
+                      <span class="badge b-blue"
+                            style="cursor:pointer;white-space:normal;text-align:left;display:inline-block"
+                            @click="() => { const e = merchantMatchedExpense(m.key); if(e){ tab='expenses'; expTab=e.frequency==='variable'?'variable':e.frequency==='one_time'?'onetime':'recurring'; openForm(e); } }">
+                        &#128230; [[ merchantMatchedExpense(m.key).name ]]
+                      </span>
+                      <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--red)"
+                              @click="unlinkMerchant(m.key)" title="Unlink">✕</button>
+                    </div>
+                  </template>
+                  <template v-else-if="merchantMatchedIncome(m.key)">
+                    <div style="display:flex;align-items:center;gap:4px">
+                      <span class="badge b-green"
+                            style="cursor:pointer;white-space:normal;text-align:left;display:inline-block"
+                            @click="() => { const s = merchantMatchedIncome(m.key); if(s) openIncomeForm(s); }">
+                        &#128176; [[ merchantMatchedIncome(m.key).name ]]
+                      </span>
+                      <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--red)"
+                              @click="unlinkIncomeSource(m.key)" title="Unlink">✕</button>
+                    </div>
+                  </template>
+                  <span v-else style="font-size:12px;color:var(--text-muted)">not linked</span>
+                </td>
+                <td>
+                  <div style="display:flex;flex-direction:column;gap:6px">
+                    <!-- Expense row -->
+                    <div style="display:flex;gap:4px;align-items:center">
+                      <span style="font-size:10px;color:var(--text-muted);width:36px;flex-shrink:0">Exp</span>
+                      <select v-model="catAssign[m.key + ':exp']" style="flex:1;min-width:90px;margin-bottom:0;font-size:12px;padding:4px 5px">
+                        <option value="">— pick —</option>
+                        <option v-for="e in expenses" :key="e.id" :value="String(e.id)">[[ e.name ]]</option>
+                      </select>
+                      <button class="btn btn-sm btn-primary" :disabled="!catAssign[m.key + ':exp']"
+                              @click="assignMerchant(m.key, catAssign[m.key + ':exp'])">Link</button>
+                      <button class="btn btn-sm btn-ghost" @click="openFormFromMerchant(m)" title="Create new expense">New</button>
+                    </div>
+                    <!-- Income row -->
+                    <div style="display:flex;gap:4px;align-items:center">
+                      <span style="font-size:10px;color:var(--text-muted);width:36px;flex-shrink:0">Inc</span>
+                      <select v-model="catAssign[m.key + ':inc']" style="flex:1;min-width:90px;margin-bottom:0;font-size:12px;padding:4px 5px">
+                        <option value="">— pick —</option>
+                        <option v-for="s in incomeSources" :key="s.id" :value="String(s.id)">[[ s.name ]]</option>
+                      </select>
+                      <button class="btn btn-sm btn-primary" :disabled="!catAssign[m.key + ':inc']"
+                              @click="assignIncomeSource(m.key, catAssign[m.key + ':inc'])">Link</button>
+      <button class="btn btn-sm btn-ghost" @click="openIncomeFormFromMerchant(m)" title="Create new income source">New</button>
+                    </div>
+                    <!-- Transfer row -->
+                    <div style="display:flex;gap:4px;align-items:center" v-if="!merchantMatchedTransfer(m.key)">
+                      <span style="font-size:10px;color:var(--text-muted);width:36px;flex-shrink:0">Tfr</span>
+                      <button class="btn btn-sm btn-ghost" @click="markAsTransfer(m.key)"
+                              style="font-size:12px">&#8646; Mark as Transfer</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- Toasts -->
@@ -899,7 +1219,8 @@
         </div>
         <div class="grid-2">
           <div class="fg">
-            <label>Amount *</label>
+            <label v-if="form.frequency === 'variable'">Monthly Budget Cap *</label>
+            <label v-else>Amount *</label>
             <input type="number" v-model="form.amount" min="0" step="0.01" placeholder="0.00">
           </div>
           <div class="fg">
@@ -911,6 +1232,7 @@
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
+              <option value="variable">Variable / Ad-hoc</option>
             </select>
           </div>
         </div>
@@ -929,7 +1251,7 @@
             <option value="other">Other</option>
           </select>
         </div>
-        <div class="grid-2" v-if="form.frequency !== 'one_time'">
+        <div class="grid-2" v-if="form.frequency !== 'one_time' && form.frequency !== 'variable'">
           <div class="fg">
             <label>Due Day of Month</label>
             <input type="number" v-model="form.due_day" min="1" max="31" placeholder="e.g. 15">
@@ -1004,9 +1326,48 @@
       </div>
     </div>
   </div>
+
   <!-- ================================================================
-       INCOME SOURCE MODAL
+       INCOME LINK MERCHANT PICKER MODAL
        ================================================================ -->
+  <div class="overlay" v-if="showIncomeLinkModal" @click.self="showIncomeLinkModal = false" style="z-index:300">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-hdr">
+        <span class="modal-title">Pick a Payer / Merchant</span>
+        <button class="btn btn-sm btn-ghost" @click="showIncomeLinkModal = false">✕</button>
+      </div>
+      <div class="modal-body" style="padding-bottom:6px">
+        <input type="search" v-model="incomeLinkSearch" placeholder="Search merchants…" style="margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--text-muted)">[[ linkedIncomeMerchantTags.length ]] selected</span>
+          <button type="button" class="btn btn-ghost btn-sm"
+                  @click="selectAllIncomeLinks"
+                  style="font-size:12px;padding:2px 8px">
+            [[ incomeLinkMerchants.every(m => linkedIncomeMerchantTags.includes(m.name)) ? 'Deselect All' : 'Select All' ]]
+          </button>
+        </div>
+        <div style="max-height:320px;overflow-y:auto;margin:0 -18px">
+          <div v-if="!incomeLinkMerchants.length" style="color:var(--text-muted);font-size:13px;padding:8px 18px">
+            No merchants found.
+          </div>
+          <div v-for="m in incomeLinkMerchants" :key="m.name"
+               :style="{ padding:'9px 18px', borderBottom:'1px solid #f3f4f6', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', background: linkedIncomeMerchantTags.includes(m.name) ? '#f0fdf4' : '' }"
+               @click="selectLinkedIncomeMerchant(m.name)"
+               @mouseover="$event.currentTarget.style.background = linkedIncomeMerchantTags.includes(m.name) ? '#dcfce7' : '#f9fafb'"
+               @mouseout="$event.currentTarget.style.background = linkedIncomeMerchantTags.includes(m.name) ? '#f0fdf4' : ''">
+            <span style="font-weight:500;font-size:13px">
+              <span v-if="linkedIncomeMerchantTags.includes(m.name)" style="color:#16a34a;margin-right:4px">✓</span>[[ m.name ]]
+            </span>
+            <span style="font-size:11px;color:var(--text-muted)">[[ m.count ]] txn[[ m.count !== 1 ? 's' : '' ]] · avg [[ fmt(m.avg) ]]</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button type="button" class="btn btn-ghost" @click="showIncomeLinkModal = false">Cancel</button>
+        <button type="button" class="btn btn-primary" @click="showIncomeLinkModal = false">Done ([[ linkedIncomeMerchantTags.length ]] selected)</button>
+      </div>
+    </div>
+  </div>
   <div class="overlay" v-if="showIncomeModal" @click.self="closeIncomeForm">
     <div class="modal">
       <div class="modal-hdr">
@@ -1017,36 +1378,37 @@
         <div class="alert alert-err" v-if="incomeFormErr">[[ incomeFormErr ]]</div>
         <div class="fg">
           <label>Name *</label>
-          <input type="text" v-model="incomeForm.name" placeholder="e.g. Boeing Salary" autofocus>
+          <input type="text" v-model="incomeForm.name" placeholder="e.g. Boeing Annual Bonus" autofocus>
         </div>
         <div class="grid-2">
           <div class="fg">
-            <label>Amount per Payment *</label>
-            <input type="number" v-model="incomeForm.amount" min="0" step="0.01" placeholder="0.00">
+            <label>Category</label>
+            <select v-model="incomeForm.category">
+              <option value="salary">Salary</option>
+              <option value="bonus">Bonus</option>
+              <option value="freelance">Freelance / Contract</option>
+              <option value="investment">Investment / Dividends</option>
+              <option value="rental">Rental Income</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div class="fg">
             <label>Frequency *</label>
             <select v-model="incomeForm.frequency">
               <option value="weekly">Weekly</option>
-              <option value="biweekly">Bi-weekly (every other week)</option>
+              <option value="biweekly">Bi-weekly</option>
               <option value="semimonthly">Semi-monthly (1st &amp; 15th)</option>
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="annual">Annual</option>
               <option value="one_time">One-time</option>
+              <option value="variable">Variable / Ad-hoc</option>
             </select>
           </div>
         </div>
         <div class="fg">
-          <label>Category</label>
-          <select v-model="incomeForm.category">
-            <option value="salary">Salary</option>
-            <option value="bonus">Bonus</option>
-            <option value="freelance">Freelance / Contract</option>
-            <option value="investment">Investment / Dividends</option>
-            <option value="rental">Rental Income</option>
-            <option value="other">Other</option>
-          </select>
+          <label>[[ incomeForm.frequency === 'variable' ? 'Typical Monthly Amount *' : 'Amount per Payment *' ]]</label>
+          <input type="number" v-model="incomeForm.amount" min="0" step="0.01" placeholder="0.00">
         </div>
         <!-- Biweekly / Weekly: anchor pay date -->
         <div class="fg" v-if="incomeForm.frequency === 'biweekly' || incomeForm.frequency === 'weekly'">
@@ -1062,6 +1424,28 @@
         <div class="fg" v-if="['quarterly','annual','one_time'].includes(incomeForm.frequency)">
           <label>Expected Date</label>
           <input type="date" v-model="incomeForm.next_pay_date">
+        </div>
+        <div class="fg">
+          <label>Payer / Merchant tag <span style="font-weight:400;color:var(--text-muted)">(auto-matches imported transactions)</span></label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start;min-height:36px;max-height:120px;overflow-y:auto;padding:4px 8px;border:1px solid #d1d5db;border-radius:var(--radius-sm);background:#fff" @click="$refs.incomeTagEl.focus()">
+            <span v-for="tag in linkedIncomeMerchantTags" :key="tag"
+                  style="display:inline-flex;align-items:center;gap:4px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:2px 8px;font-size:12px;max-width:260px">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="tag">[[ tag ]]</span>
+              <button type="button" @click.stop="removeIncomeTag(tag)" style="background:none;border:none;cursor:pointer;padding:0;line-height:1;color:#6b7280;flex-shrink:0">✕</button>
+            </span>
+            <input ref="incomeTagEl" type="text" v-model="incomeTagInput"
+                   @keydown.enter.prevent="addIncomeTag"
+                   list="income-merchant-datalist"
+                   placeholder="Type or pick…"
+                   style="border:none;outline:none;flex:1;min-width:120px;padding:0;font-size:14px;background:transparent">
+          </div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button type="button" class="btn btn-ghost btn-sm" @click="openIncomeLinkPicker"
+                    :disabled="!transactions.length">+ Pick from transactions</button>
+          </div>
+          <datalist id="income-merchant-datalist">
+            <option v-for="m in linkMerchants" :value="m.name" :key="m.name"></option>
+          </datalist>
         </div>
         <div class="fg">
           <label>Notes</label>
@@ -1089,6 +1473,7 @@ const app = createApp({
     // ---- State ----
     const tab     = ref('accounts');
     const expTab  = ref('recurring');
+    const incTab  = ref('regular');
     const username  = ref(cfg.username);
     const logoutUrl = ref(cfg.logoutUrl);
 
@@ -1111,6 +1496,11 @@ const app = createApp({
     const txnView    = ref('merchant');  // default to grouped view
     const txnTotal   = ref(0);
 
+    // Categorize tab state
+    const catFilter = ref('unmatched');
+    const catSearch = ref('');
+    const catAssign = reactive({});
+
     // Income sources
     const incomeSources       = ref([]);
     const loadingInc          = ref(true);
@@ -1119,7 +1509,8 @@ const app = createApp({
     const incomeFormErr       = ref('');
     const incomeSaving        = ref(false);
     const pendingDeleteIncomeId = ref(null);
-    const incomeForm          = reactive({ name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '' });
+    const expandedIncomeId    = ref(null);
+    const incomeForm          = reactive({ name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '', linked_merchant: '' });
 
     // Notifications & UI state
     const toasts          = ref([]);
@@ -1136,11 +1527,65 @@ const app = createApp({
         ? form.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
         : []
     );
+    const incomeTagInput = ref('');
+    const showIncomeLinkModal = ref(false);
+    const incomeLinkSearch    = ref('');
+    const linkedIncomeMerchantTags = computed(() =>
+      incomeForm.linked_merchant
+        ? incomeForm.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : []
+    );
     const acctError       = ref('');
     const txnError        = ref('');
 
+    // AI suggestions
+    const aiSuggestions        = ref([]);
+    const loadingAI            = ref(false);
+    const loadingAICache       = ref(false);
+    const aiError              = ref('');
+    const aiCachedAt           = ref('');          // ISO timestamp of cached result
+    const expandedAISuggestions = ref({});         // {name: true} for expanded txn lists
+    const pendingAISuggestionName = ref('');       // name being accepted → auto-dismiss on save
+    const dismissedAISuggestions = ref({});         // {name: true} for dismissed cards
+
     // Forecast income (derived from income sources)
     const monthlyIncome = computed(() => incomeSources.value.reduce((s, src) => s + parseFloat(src.monthly_amount), 0));
+
+    const regularIncomeSources = computed(() => incomeSources.value.filter(s => s.frequency !== 'variable'));
+    const variableIncomeSources = computed(() => incomeSources.value.filter(s => s.frequency === 'variable'));
+    const monthlyRegularIncome = computed(() => regularIncomeSources.value.reduce((s, src) => s + parseFloat(src.monthly_amount), 0));
+    const monthlyVariableIncome = computed(() => variableIncomeSources.value.reduce((s, src) => s + parseFloat(src.monthly_amount), 0));
+
+    const incomeWarnings = computed(() => {
+      const today = new Date().toISOString().slice(0, 10);
+      // Duplicate = same name + same category + amount within 5%
+      const dupKeys = {};
+      for (const s of incomeSources.value) {
+        const key = s.name.trim().toLowerCase() + '|' + s.category;
+        if (!dupKeys[key]) dupKeys[key] = [];
+        dupKeys[key].push(parseFloat(s.amount));
+      }
+      const isDup = (s) => {
+        const key = s.name.trim().toLowerCase() + '|' + s.category;
+        const amounts = dupKeys[key];
+        if (amounts.length < 2) return false;
+        const amt = parseFloat(s.amount);
+        return amounts.some(a => a !== amt && Math.abs(a - amt) / Math.max(a, amt) < 0.05)
+          || amounts.filter(a => Math.abs(a - amt) / Math.max(a, amt, 1) < 0.05).length > 1;
+      };
+      const map = {};
+      for (const s of incomeSources.value) {
+        const issues = [];
+        if (isDup(s))
+          issues.push('Possible duplicate — same name, category, and similar amount as another source');
+        if (!s.linked_merchant && !['one_time', 'variable'].includes(s.frequency))
+          issues.push('No payer tag — transactions cannot be auto-matched');
+        if (s.frequency === 'one_time' && s.next_pay_date && s.next_pay_date < today)
+          issues.push('One-time payment date has passed — consider deleting');
+        if (issues.length) map[s.id] = issues;
+      }
+      return map;
+    });
 
     // ---- Computed ----
     const totalAccounts = computed(() => items.value.reduce((s, i) => s + i.accounts.length, 0));
@@ -1153,12 +1598,17 @@ const app = createApp({
       return n;
     });
 
-    const recurring = computed(() => expenses.value.filter(e => e.frequency !== 'one_time'));
+    const recurring = computed(() => expenses.value.filter(e => e.frequency !== 'one_time' && e.frequency !== 'variable'));
+    const variable  = computed(() => expenses.value.filter(e => e.frequency === 'variable'));
     const onetime   = computed(() => expenses.value.filter(e => e.frequency === 'one_time'));
 
-    const visibleExpenses = computed(() => expTab.value === 'recurring' ? recurring.value : onetime.value);
+    const visibleExpenses = computed(() => {
+      if (expTab.value === 'recurring') return recurring.value;
+      if (expTab.value === 'variable')  return variable.value;
+      return onetime.value;
+    });
 
-    const totalMonthly = computed(() => recurring.value.reduce((s, e) => s + parseFloat(e.monthly_amount), 0));
+    const totalMonthly = computed(() => [...recurring.value, ...variable.value].reduce((s, e) => s + parseFloat(e.monthly_amount), 0));
 
     const net = computed(() => monthlyIncome.value - totalMonthly.value);
 
@@ -1170,35 +1620,40 @@ const app = createApp({
         const dow = today.getDay();
         const mon = new Date(y, m, d - (dow === 0 ? 6 : dow - 1));
         const sun = new Date(mon.getTime() + 6 * 86400000);
-        return { start: mon.toISOString().split('T')[0], end: sun.toISOString().split('T')[0], months: 7 / 30.4375 };
+        return { start: mon.toISOString().split('T')[0], end: sun.toISOString().split('T')[0], months: 7 / 30.4375, prorateFactor: 1 };
       }
       if (expSummaryPeriod.value === 'month') {
-        return { start: `${y}-${String(m+1).padStart(2,'0')}-01`, end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 1 };
+        const daysInMonth = new Date(y, m + 1, 0).getDate();
+        return { start: `${y}-${String(m+1).padStart(2,'0')}-01`, end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 1, prorateFactor: d / daysInMonth };
       }
       if (expSummaryPeriod.value === 'last_month') {
         const pm = m === 0 ? 11 : m - 1, py = m === 0 ? y - 1 : y;
-        return { start: `${py}-${String(pm+1).padStart(2,'0')}-01`, end: new Date(py, pm+1, 0).toISOString().split('T')[0], months: 1 };
+        return { start: `${py}-${String(pm+1).padStart(2,'0')}-01`, end: new Date(py, pm+1, 0).toISOString().split('T')[0], months: 1, prorateFactor: 1 };
       }
       if (expSummaryPeriod.value === '3months') {
         const start = new Date(y, m - 2, 1);
-        return { start: start.toISOString().split('T')[0], end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 3 };
+        return { start: start.toISOString().split('T')[0], end: new Date(y, m+1, 0).toISOString().split('T')[0], months: 3, prorateFactor: 1 };
       }
       // year
-      return { start: `${y}-01-01`, end: `${y}-12-31`, months: 12 };
+      return { start: `${y}-01-01`, end: `${y}-12-31`, months: 12, prorateFactor: 1 };
     });
 
     const expSummaryRows = computed(() => {
-      const { start, end, months } = expSummaryBounds.value;
-      return expenses.value.map(e => {
-        const budget = parseFloat(e.monthly_amount) * months;
-        const matched = expenseMatches(e);
-        const actual = matched
-          .filter(t => t.date >= start && t.date <= end)
-          .reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0);
-        const variance = actual - budget;
-        const pct = budget > 0 ? Math.min((actual / budget) * 100, 150) : 0;
-        return { ...e, budget, actual, variance, pct };
-      });
+      const { start, end, months, prorateFactor } = expSummaryBounds.value;
+      return expenses.value
+        .filter(e => e.frequency !== 'one_time')
+        .map(e => {
+          // Variable expenses: full monthly cap, no mid-month proration
+          const pf = e.frequency === 'variable' ? 1 : prorateFactor;
+          const budget = parseFloat(e.monthly_amount) * months * pf;
+          const matched = expenseMatches(e);
+          const actual = matched
+            .filter(t => t.date >= start && t.date <= end)
+            .reduce((s, t) => s + Math.abs(parseFloat(t.amount)), 0);
+          const variance = actual - budget;
+          const pct = budget > 0 ? Math.min((actual / budget) * 100, 150) : 0;
+          return { ...e, budget, actual, variance, pct };
+        });
     });
 
     const expSummaryTotals = computed(() => {
@@ -1207,6 +1662,89 @@ const app = createApp({
       const actual = rows.filter(r => r.linked_merchant).reduce((s, r) => s + r.actual, 0);
       return { budget, actual, variance: actual - budget };
     });
+
+    const visibleAISuggestions = computed(() =>
+      aiSuggestions.value.filter(s => !dismissedAISuggestions.value[s.name])
+    );
+
+    // Returns the existing expense that matches a suggestion by name (case-insensitive)
+    function aiSuggestionMatchesExpense(s) {
+      const lower = s.name.toLowerCase();
+      return expenses.value.find(e => e.name.toLowerCase() === lower) || null;
+    }
+
+    function toggleAITxnList(name) {
+      const cur = expandedAISuggestions.value;
+      expandedAISuggestions.value = { ...cur, [name]: !cur[name] };
+    }
+
+    async function loadAICache() {
+      if (loadingAICache.value) return;
+      loadingAICache.value = true;
+      try {
+        const r = await fetch('/api/ai-suggest/', { credentials: 'same-origin' });
+        const d = await r.json();
+        if (r.ok && d.suggestions && d.suggestions.length) {
+          aiSuggestions.value = d.suggestions;
+          aiCachedAt.value = d.generated_at || '';
+          dismissedAISuggestions.value = {};
+        }
+      } catch { /* silently ignore cache load errors */ }
+      finally { loadingAICache.value = false; }
+    }
+
+    async function loadAISuggestions() {
+      loadingAI.value = true;
+      aiError.value = '';
+      try {
+        const r = await fetch('/api/ai-suggest/', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-CSRFToken': cookie('csrftoken'), 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+        aiSuggestions.value = d.suggestions || [];
+        aiCachedAt.value = '';
+        dismissedAISuggestions.value = {};
+      } catch (e) {
+        aiError.value = e.message || 'Unknown error from AI.';
+      } finally {
+        loadingAI.value = false;
+      }
+    }
+
+    function dismissAISuggestion(name) {
+      dismissedAISuggestions.value = { ...dismissedAISuggestions.value, [name]: true };
+    }
+
+    function acceptAISuggestion(s, forceOneTime = false) {
+      pendingAISuggestionName.value = s.name;
+      const existing = aiSuggestionMatchesExpense(s);
+      if (existing) {
+        // Merge AI-suggested merchants into the existing expense
+        const existingTags = existing.linked_merchant
+          ? existing.linked_merchant.split('|').map(t => t.trim()).filter(Boolean)
+          : [];
+        const merged = [...new Set([...existingTags, ...s.linked_merchants])].join('|');
+        openForm({ ...existing, linked_merchant: merged });
+      } else {
+        const txn = s.transactions && s.transactions[0];
+        openForm({
+          id: null,
+          name: s.name,
+          amount: s.suggested_amount.toFixed(2),
+          category: s.category,
+          frequency: forceOneTime ? 'one_time' : s.frequency,
+          due_day: '',
+          due_date: forceOneTime && txn ? txn.date : '',
+          notes: s.reason || '',
+          linked_merchant: s.linked_merchants.join('|'),
+          _fromTxn: false,
+        });
+      }
+    }
 
     const catBreakdown = computed(() => {
       const map = {};
@@ -1238,6 +1776,23 @@ const app = createApp({
     // Merchants for the link picker (with search, sorted by frequency)
     const linkMerchants = computed(() => {
       const q = linkSearch.value.trim().toLowerCase();
+      const map = {};
+      for (const t of transactions.value) {
+        const name = (t.merchant_name || t.name || '').trim();
+        if (!name) continue;
+        if (q && !name.toLowerCase().includes(q)) continue;
+        if (!map[name]) map[name] = { name, count: 0, total: 0 };
+        map[name].count++;
+        map[name].total += Math.abs(parseFloat(t.amount));
+      }
+      return Object.values(map)
+        .map(m => ({ ...m, avg: m.total / m.count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 60);
+    });
+
+    const incomeLinkMerchants = computed(() => {
+      const q = incomeLinkSearch.value.trim().toLowerCase();
       const map = {};
       for (const t of transactions.value) {
         const name = (t.merchant_name || t.name || '').trim();
@@ -1289,6 +1844,168 @@ const app = createApp({
         .filter(m => m.count > 0)
         .sort((a, b) => b.count - a.count || b.avg - a.avg);
     });
+
+    // ---- Categorize tab computeds & functions ----
+    function merchantMatchedExpense(merchantKey) {
+      const key = merchantKey.toLowerCase();
+      return expenses.value.find(e => {
+        if (!e.linked_merchant) return false;
+        return e.linked_merchant.split('|').map(s => s.trim().toLowerCase()).filter(Boolean)
+          .some(m => key.includes(m) || m.includes(key));
+      }) || null;
+    }
+
+    function merchantMatchedIncome(merchantKey) {
+      const key = merchantKey.toLowerCase();
+      return incomeSources.value.find(src => {
+        if (!src.linked_merchant) return false;
+        return src.linked_merchant.split('|').map(s => s.trim().toLowerCase()).filter(Boolean)
+          .some(m => key.includes(m) || m.includes(key));
+      }) || null;
+    }
+
+    const categorizeGroups = computed(() => {
+      const q = catSearch.value.trim().toLowerCase();
+      const map = {};
+      for (const t of transactions.value) {
+        const name = (t.merchant_name || t.name || '').trim();
+        if (!name) continue;
+        if (q && !name.toLowerCase().includes(q)) continue;
+        if (!map[name]) map[name] = { key: name, name, amounts: [], dates: [], category: t.category, isCredit: false };
+        const amt = parseFloat(t.amount);
+        map[name].amounts.push(Math.abs(amt));
+        map[name].dates.push(t.date);
+        if (amt < 0) map[name].isCredit = true;  // negative amounts = money coming in
+      }
+      let groups = Object.values(map).map(m => {
+        const total = m.amounts.reduce((s, v) => s + v, 0);
+        const avg   = total / m.amounts.length;
+        const { freq, label: freqLabel } = detectFrequency(m.dates);
+        const lastDate = [...m.dates].sort().at(-1);
+        return { ...m, count: m.amounts.length, total, avg, freq, freqLabel, lastDate };
+      });
+      if (catFilter.value === 'unmatched') {
+        groups = groups.filter(m => !merchantMatchedExpense(m.key) && !merchantMatchedIncome(m.key) && !merchantMatchedTransfer(m.key));
+      } else if (catFilter.value === 'income') {
+        groups = groups.filter(m => m.isCredit && !merchantMatchedTransfer(m.key) && !merchantMatchedExpense(m.key));
+      } else if (catFilter.value === 'expenses') {
+        groups = groups.filter(m => !m.isCredit && !merchantMatchedTransfer(m.key));
+      } else if (catFilter.value === 'transfers') {
+        groups = groups.filter(m => merchantMatchedTransfer(m.key));
+      }
+      return groups.sort((a, b) => b.total - a.total);
+    });
+
+    const unmatchedCount = computed(() => {
+      const seen = new Set();
+      for (const t of transactions.value) {
+        const name = (t.merchant_name || t.name || '').trim();
+        if (name) seen.add(name);
+      }
+      let count = 0;
+      for (const k of seen) { if (!merchantMatchedExpense(k) && !merchantMatchedIncome(k) && !merchantMatchedTransfer(k)) count++; }
+      return count;
+    });
+
+    const transferCount = computed(() => transferMerchants.value.length);
+
+    async function assignMerchant(merchantKey, expenseId) {
+      const expense = expenses.value.find(e => e.id === parseInt(expenseId));
+      if (!expense) return;
+      const existing = expense.linked_merchant
+        ? expense.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : [];
+      if (!existing.some(m => m.toLowerCase() === merchantKey.toLowerCase())) {
+        existing.push(merchantKey);
+      }
+      const r = await fetch(`/api/expenses/${expense.id}/`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+        body: JSON.stringify({
+          name: expense.name, amount: expense.amount, category: expense.category,
+          frequency: expense.frequency, due_day: expense.due_day || null,
+          due_date: expense.due_date || null, notes: expense.notes || '',
+          linked_merchant: existing.join('|')
+        })
+      });
+      if (r.ok) {
+        await loadExpenses();
+        catAssign[merchantKey] = '';
+        showToast(`Linked \u201c${merchantKey}\u201d \u2192 ${expense.name}`);
+      } else {
+        showToast('Failed to link \u2014 please try again', 'err');
+      }
+    }
+
+    async function assignIncomeSource(merchantKey, sourceId) {
+      const src = incomeSources.value.find(s => s.id === parseInt(sourceId));
+      if (!src) return;
+      const existing = src.linked_merchant
+        ? src.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : [];
+      if (!existing.some(m => m.toLowerCase() === merchantKey.toLowerCase())) {
+        existing.push(merchantKey);
+      }
+      const r = await fetch(`/api/income/${src.id}/`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+        body: JSON.stringify({
+          name: src.name, amount: src.amount, category: src.category,
+          frequency: src.frequency, next_pay_date: src.next_pay_date || null,
+          day_of_month: src.day_of_month || null, notes: src.notes || '',
+          linked_merchant: existing.join('|')
+        })
+      });
+      if (r.ok) {
+        await loadIncomeSources();
+        catAssign[merchantKey] = '';
+        showToast(`Linked \u201c${merchantKey}\u201d \u2192 ${src.name}`);
+      } else {
+        showToast('Failed to link \u2014 please try again', 'err');
+      }
+    }
+
+    async function unlinkMerchant(merchantKey) {
+      const expense = merchantMatchedExpense(merchantKey);
+      if (!expense) return;
+      const updated = expense.linked_merchant
+        .split('|').map(s => s.trim()).filter(Boolean)
+        .filter(m => m.toLowerCase() !== merchantKey.toLowerCase())
+        .join('|');
+      const r = await fetch(`/api/expenses/${expense.id}/`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+        body: JSON.stringify({
+          name: expense.name, amount: expense.amount, category: expense.category,
+          frequency: expense.frequency, due_day: expense.due_day || null,
+          due_date: expense.due_date || null, notes: expense.notes || '',
+          linked_merchant: updated
+        })
+      });
+      if (r.ok) { await loadExpenses(); showToast(`Unlinked \u201c${merchantKey}\u201d`); }
+      else showToast('Failed to unlink \u2014 please try again', 'err');
+    }
+
+    async function unlinkIncomeSource(merchantKey) {
+      const src = merchantMatchedIncome(merchantKey);
+      if (!src) return;
+      const updated = src.linked_merchant
+        .split('|').map(s => s.trim()).filter(Boolean)
+        .filter(m => m.toLowerCase() !== merchantKey.toLowerCase())
+        .join('|');
+      const r = await fetch(`/api/income/${src.id}/`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+        body: JSON.stringify({
+          name: src.name, amount: src.amount, category: src.category,
+          frequency: src.frequency, next_pay_date: src.next_pay_date || null,
+          day_of_month: src.day_of_month || null, notes: src.notes || '',
+          linked_merchant: updated
+        })
+      });
+      if (r.ok) { await loadIncomeSources(); showToast(`Unlinked \u201c${merchantKey}\u201d`); }
+      else showToast('Failed to unlink \u2014 please try again', 'err');
+    }
 
     // ---- Helpers ----
     function showToast(message, type = 'ok') {
@@ -1367,6 +2084,39 @@ const app = createApp({
       } finally { loadingInc.value = false; }
     }
 
+    const transferMerchants = ref([]);  // [{id, merchant_key}]
+
+    async function loadTransfers() {
+      const r = await fetch('/api/transfers/', { credentials: 'same-origin' });
+      transferMerchants.value = (await r.json()).transfers || [];
+    }
+
+    function merchantMatchedTransfer(merchantKey) {
+      const key = merchantKey.toLowerCase();
+      return transferMerchants.value.find(t => t.merchant_key.toLowerCase() === key) || null;
+    }
+
+    async function markAsTransfer(merchantKey) {
+      const r = await fetch('/api/transfers/', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': cookie('csrftoken') },
+        body: JSON.stringify({ merchant_key: merchantKey })
+      });
+      if (r.ok) { await loadTransfers(); showToast(`\u201c${merchantKey}\u201d marked as Transfer`); }
+      else showToast('Failed — please try again', 'err');
+    }
+
+    async function unmarkTransfer(merchantKey) {
+      const t = merchantMatchedTransfer(merchantKey);
+      if (!t) return;
+      const r = await fetch(`/api/transfers/${t.id}/`, {
+        method: 'DELETE', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': cookie('csrftoken') }
+      });
+      if (r.ok) { await loadTransfers(); showToast('Transfer mark removed'); }
+      else showToast('Failed — please try again', 'err');
+    }
+
     function nextIncomeDate(src) {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
@@ -1401,20 +2151,51 @@ const app = createApp({
         Object.assign(incomeForm, {
           name: src.name, amount: src.amount, frequency: src.frequency,
           category: src.category, next_pay_date: src.next_pay_date || '',
-          day_of_month: src.day_of_month || '', notes: src.notes || ''
+          day_of_month: src.day_of_month || '', notes: src.notes || '',
+          linked_merchant: src.linked_merchant || ''
         });
       } else {
         editIncomeId.value = null;
-        Object.assign(incomeForm, { name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '' });
+        Object.assign(incomeForm, { name: '', amount: '', frequency: 'biweekly', category: 'salary', next_pay_date: '', day_of_month: '', notes: '', linked_merchant: '' });
       }
       incomeFormErr.value = '';
       showIncomeModal.value = true;
+    }
+
+    function openIncomeFormFromMerchant(m) {
+      editIncomeId.value = null;
+      const freqMap = { weekly: 'weekly', biweekly: 'biweekly', semimonthly: 'semimonthly',
+                        monthly: 'monthly', quarterly: 'quarterly', annual: 'annual', one_time: 'one_time' };
+      const freq = freqMap[m.freq] || 'annual';
+      Object.assign(incomeForm, {
+        name: '',
+        amount: m.avg.toFixed(2),
+        frequency: freq,
+        category: 'bonus',
+        next_pay_date: m.lastDate || '',
+        day_of_month: '',
+        notes: `${m.count} payment${m.count > 1 ? 's' : ''} imported from transactions`,
+        linked_merchant: m.key,
+      });
+      incomeFormErr.value = '';
+      showIncomeModal.value = true;
+    }
+
+    function incomeTransactions(src) {
+      if (!src.linked_merchant) return [];
+      const tags = src.linked_merchant.split('|').map(s => s.trim().toLowerCase()).filter(Boolean);
+      return transactions.value.filter(t => {
+        const name = (t.merchant_name || t.name || '').trim().toLowerCase();
+        return name && tags.some(tag => tag.length >= 3 && name.includes(tag));
+      }).sort((a, b) => b.date.localeCompare(a.date));
     }
 
     function closeIncomeForm() {
       showIncomeModal.value = false;
       editIncomeId.value = null;
       incomeFormErr.value = '';
+      incomeForm.linked_merchant = '';
+      incomeTagInput.value = '';
     }
 
     async function saveIncomeSource() {
@@ -1424,7 +2205,8 @@ const app = createApp({
         frequency: incomeForm.frequency, category: incomeForm.category,
         next_pay_date: incomeForm.next_pay_date || null,
         day_of_month: incomeForm.day_of_month || null,
-        notes: incomeForm.notes
+        notes: incomeForm.notes,
+        linked_merchant: incomeForm.linked_merchant || ''
       };
       try {
         const url    = editIncomeId.value ? `/api/income/${editIncomeId.value}/` : '/api/income/';
@@ -1651,6 +2433,81 @@ const app = createApp({
       // stay open so user can pick more
     }
 
+    // Strip ACH boilerplate (trace numbers, entry class codes, type/CO prefixes)
+    // that change per-transaction, leaving just the stable identifying part.
+    function normalizeAchTag(raw) {
+      let s = raw
+        .replace(/\s*Entry Class Code[:\s]+\S+.*/i, '')   // remove from Entry Class Code onward
+        .replace(/\s*ACH Trace Number[:\s]+\S+.*/i, '')    // remove from ACH Trace Number onward
+        .replace(/\s*Trace Number[:\s]+\S+.*/i, '')        // alternate form
+        .replace(/\bOID\d+\b/gi, '')                       // OID codes
+        .replace(/^[\w/]+Type[:\s]+[\S]+\s+/i, '')        // leading "Type: PAYROLL "
+        .replace(/\bCO[:\s]+/i, '')                        // strip "CO: " prefix
+        .replace(/\s+/g, ' ')
+        .trim();
+      // If normalizing produced something shorter and still meaningful, return it;
+      // otherwise return original trimmed.
+      return s.length >= 4 ? s : raw.trim();
+    }
+
+    function openIncomeLinkPicker() {
+      incomeLinkSearch.value = '';
+      showIncomeLinkModal.value = true;
+    }
+
+    function addIncomeTag() {
+      const raw = incomeTagInput.value.trim();
+      if (!raw) return;
+      const norm = normalizeAchTag(raw);
+      const existing = linkedIncomeMerchantTags.value;
+      const toAdd = norm !== raw && !existing.includes(norm) ? [norm] : [];
+      if (!existing.includes(raw)) toAdd.push(raw);
+      if (toAdd.length)
+        incomeForm.linked_merchant = [...existing, ...toAdd].join('|');
+      incomeTagInput.value = '';
+    }
+
+    function removeIncomeTag(tag) {
+      incomeForm.linked_merchant = linkedIncomeMerchantTags.value.filter(t => t !== tag).join('|');
+    }
+
+    function selectLinkedIncomeMerchant(name) {
+      const tags = incomeForm.linked_merchant
+        ? incomeForm.linked_merchant.split('|').map(s => s.trim()).filter(Boolean)
+        : [];
+      const norm = normalizeAchTag(name);
+      if (tags.includes(name)) {
+        // Deselect: remove both raw and normalized forms
+        incomeForm.linked_merchant = tags.filter(t => t !== name && t !== norm).join('|');
+      } else {
+        // Add normalized form (if different and useful) + raw form
+        if (norm !== name && !tags.includes(norm)) tags.push(norm);
+        if (!tags.includes(name)) tags.push(name);
+        incomeForm.linked_merchant = tags.join('|');
+      }
+    }
+
+    function selectAllIncomeLinks() {
+      const visibleNames = incomeLinkMerchants.value.map(m => m.name);
+      const allSelected = visibleNames.every(n => {
+        const norm = normalizeAchTag(n);
+        return linkedIncomeMerchantTags.value.includes(n) || linkedIncomeMerchantTags.value.includes(norm);
+      });
+      if (allSelected) {
+        const toRemove = new Set(visibleNames.flatMap(n => [n, normalizeAchTag(n)]));
+        incomeForm.linked_merchant = linkedIncomeMerchantTags.value.filter(t => !toRemove.has(t)).join('|');
+      } else {
+        const existing = linkedIncomeMerchantTags.value;
+        const toAdd = [];
+        for (const n of visibleNames) {
+          const norm = normalizeAchTag(n);
+          if (!existing.includes(norm)) toAdd.push(norm);
+          if (norm !== n && !existing.includes(n)) toAdd.push(n);
+        }
+        incomeForm.linked_merchant = [...new Set([...existing, ...toAdd])].join('|');
+      }
+    }
+
     function openForm(exp) {
       if (exp) {
         editId.value = exp.id;
@@ -1723,6 +2580,11 @@ const app = createApp({
         const d = await r.json();
         if (!r.ok) { formErr.value = d.error || 'Failed to save.'; return; }
         await loadExpenses();
+        // Auto-dismiss the AI suggestion card that triggered this save
+        if (pendingAISuggestionName.value) {
+          dismissedAISuggestions.value = { ...dismissedAISuggestions.value, [pendingAISuggestionName.value]: true };
+          pendingAISuggestionName.value = '';
+        }
         closeForm();
         showToast(wasEdit ? 'Expense updated' : 'Expense added');
       } catch { formErr.value = 'An error occurred. Please try again.'; }
@@ -1826,9 +2688,11 @@ const app = createApp({
 
     watch(tab, newTab => { if (newTab === 'forecast') drawCharts(); });
     watch([catBreakdown, monthlyIncome, onetime], () => { if (tab.value === 'forecast') drawCharts(); });
+    // Auto-load cached AI suggestions when switching to the AI tab
+    watch(expTab, newTab => { if (newTab === 'ai' && !aiSuggestions.value.length) loadAICache(); });
 
     onMounted(() => {
-      Promise.all([loadAccounts(), loadTransactions(), loadExpenses(), loadIncomeSources()]);
+      Promise.all([loadAccounts(), loadTransactions(), loadExpenses(), loadIncomeSources(), loadTransfers()]);
       document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
           if (showLinkModal.value) showLinkModal.value = false;
@@ -1839,21 +2703,29 @@ const app = createApp({
     });
 
     return {
-      tab, expTab, username, logoutUrl,
+      tab, expTab, incTab, username, logoutUrl,
       items, transactions, loadingAccts, connecting, refreshing,
       expenses, loadingExp, showModal, editId, formErr, saving, form,
       incomeSources, loadingInc, showIncomeModal, editIncomeId, incomeFormErr, incomeSaving, incomeForm, pendingDeleteIncomeId,
+      expandedIncomeId, incomeTransactions, regularIncomeSources, variableIncomeSources, monthlyRegularIncome, monthlyVariableIncome, incomeWarnings,
       monthlyIncome,
       totalAccounts, netWorth, visibleExpenses, totalMonthly, net, catBreakdown, upcoming,
       expSummaryPeriod, expSummaryBounds, expSummaryRows, expSummaryTotals,
+      aiSuggestions, loadingAI, loadingAICache, aiError, aiCachedAt, visibleAISuggestions, expandedAISuggestions,
+      loadAICache, loadAISuggestions, dismissAISuggestion, acceptAISuggestion, aiSuggestionMatchesExpense, toggleAITxnList,
       filteredTxnsForPicker, filteredMerchants, linkMerchants,
       txnSearch, txnView, txnTotal,
+      catFilter, catSearch, catAssign, categorizeGroups, unmatchedCount, transferCount,
+      merchantMatchedExpense, merchantMatchedIncome, merchantMatchedTransfer, assignMerchant, assignIncomeSource,
+      unlinkMerchant, unlinkIncomeSource, transferMerchants, markAsTransfer, unmarkTransfer,
       toasts, pendingDeleteId, expandedExpenseId, showLinkModal, linkSearch, merchantTagInput, linkedMerchantTags, acctError, txnError,
+      incomeTagInput, showIncomeLinkModal, incomeLinkSearch, linkedIncomeMerchantTags, incomeLinkMerchants,
+      addIncomeTag, removeIncomeTag, openIncomeLinkPicker, selectLinkedIncomeMerchant, selectAllIncomeLinks,
       fmt, ago, cap, statusBadge, isLiability,
       showToast, dismissToast,
       expenseMatches, nextPayment, paymentHistory, paymentStatusBadge, paymentStatusLabel, toggleExpand, openLinkPicker, selectLinkedMerchant, addLinkedMerchantTag, removeLinkedMerchant,
       connectAccount, refreshItem, openForm, openFormFromTxn, openFormFromMerchant, closeForm, saveExpense, removeExpense,
-      openIncomeForm, closeIncomeForm, saveIncomeSource, removeIncome, nextIncomeDate,
+      openIncomeForm, openIncomeFormFromMerchant, closeIncomeForm, saveIncomeSource, removeIncome, nextIncomeDate,
       parseFloat, Math
     };
   }

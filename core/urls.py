@@ -2,11 +2,14 @@ from django.urls import path
 
 from .views import (
     api_accounts,
+    api_ai_suggest,
     api_expense_detail,
     api_expenses,
     api_income,
     api_income_detail,
     api_transactions,
+    api_transfer_detail,
+    api_transfers,
     home,
     plaid_exchange_token,
     plaid_link_token,
@@ -28,4 +31,7 @@ urlpatterns = [
     path("api/expenses/<int:expense_id>/", api_expense_detail, name="api-expense-detail"),
     path("api/income/", api_income, name="api-income"),
     path("api/income/<int:source_id>/", api_income_detail, name="api-income-detail"),
+    path("api/transfers/", api_transfers, name="api-transfers"),
+    path("api/transfers/<int:transfer_id>/", api_transfer_detail, name="api-transfer-detail"),
+    path("api/ai-suggest/", api_ai_suggest, name="api-ai-suggest"),
 ]

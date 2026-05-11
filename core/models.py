@@ -165,6 +165,7 @@ class ExpenseFrequency(models.TextChoices):
     MONTHLY = "monthly", "Monthly"
     QUARTERLY = "quarterly", "Quarterly"
     ANNUAL = "annual", "Annual"
+    VARIABLE = "variable", "Variable / Ad-hoc"
 
 
 class ExpenseCategory(models.TextChoices):
@@ -201,8 +202,7 @@ class Expense(models.Model):
         help_text="Due date for one-time expenses",
     )
     notes = models.TextField(blank=True)
-    linked_merchant = models.CharField(
-        max_length=255,
+    linked_merchant = models.TextField(
         blank=True,
         help_text="Merchant name pattern to auto-match against imported transactions",
     )
@@ -226,6 +226,7 @@ class Expense(models.Model):
             ExpenseFrequency.QUARTERLY: Decimal("0.3333"),
             ExpenseFrequency.ANNUAL: Decimal("0.0833"),
             ExpenseFrequency.ONE_TIME: Decimal("0"),
+            ExpenseFrequency.VARIABLE: Decimal("1"),  # amount is the monthly budget cap
         }
         return (self.amount * multipliers.get(self.frequency, Decimal("1"))).quantize(Decimal("0.01"))
 
@@ -238,6 +239,7 @@ class IncomeFrequency(models.TextChoices):
     QUARTERLY = "quarterly", "Quarterly"
     ANNUAL = "annual", "Annual"
     ONE_TIME = "one_time", "One-time"
+    VARIABLE = "variable", "Variable"
 
 
 class IncomeCategory(models.TextChoices):
@@ -270,6 +272,10 @@ class IncomeSource(models.Model):
         help_text="Day of month (1–28) for monthly income",
     )
     notes = models.TextField(blank=True)
+    linked_merchant = models.TextField(
+        blank=True,
+        help_text="Merchant/payer name pattern to auto-match against imported transactions",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -290,6 +296,7 @@ class IncomeSource(models.Model):
             IncomeFrequency.QUARTERLY: Decimal("0.3333"),
             IncomeFrequency.ANNUAL: Decimal("0.0833"),
             IncomeFrequency.ONE_TIME: Decimal("0"),
+            IncomeFrequency.VARIABLE: Decimal("1"),  # amount = typical monthly
         }
         return (self.amount * multipliers.get(self.frequency, Decimal("1"))).quantize(Decimal("0.01"))
 
@@ -303,6 +310,7 @@ class IncomeSource(models.Model):
             IncomeFrequency.QUARTERLY: Decimal("4"),
             IncomeFrequency.ANNUAL: Decimal("1"),
             IncomeFrequency.ONE_TIME: Decimal("1"),
+            IncomeFrequency.VARIABLE: Decimal("12"),  # amount = typical monthly
         }
         return (self.amount * multipliers.get(self.frequency, Decimal("1"))).quantize(Decimal("0.01"))
 
@@ -323,3 +331,29 @@ class SyncRun(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_trigger_display()} sync for {self.item.external_id}"
+
+
+class AISuggestionCache(models.Model):
+    """Stores the last AI suggestion result per user to avoid redundant API calls."""
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ai_suggestion_cache",
+    )
+    suggestions = models.JSONField(default=list)
+    generated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"AI cache for {self.user} ({self.generated_at:%Y-%m-%d %H:%M})"
+
+
+class TransferMerchant(models.Model):
+    """Merchants marked by the user as account transfers (not income or expenses)."""
+    merchant_key = models.TextField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["merchant_key"]
+
+    def __str__(self) -> str:
+        return self.merchant_key
